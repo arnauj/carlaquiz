@@ -1385,9 +1385,10 @@ function startLobby() {
       if (!players[msg.name]) {
         players[msg.name] = { score: 0, answers: [], streak: 0 };
         renderPlayers();
-        channel.postMessage({ type: 'joined', name: msg.name });
         showToast(`${msg.name} se ha unido`, 'info');
       }
+      // Siempre responde con 'joined' para confirmar (el alumno puede estar reintentando)
+      channel.postMessage({ type: 'joined', name: msg.name });
     } else if (msg.type === 'answer') {
       handleStudentAnswer(msg.name, msg.answerIndex, msg.timeSpent);
     }
@@ -1415,14 +1416,23 @@ function joinGame() {
   studentScore = 0;
 
   initChannel(pin);
-  channel.postMessage({ type: 'join', name });
+
+  // Reintenta el join cada segundo hasta recibir confirmación del profesor
+  let joinConfirmed = false;
+  function sendJoin() { channel.postMessage({ type: 'join', name }); }
+  sendJoin();
+  const joinRetry = setInterval(() => { if (!joinConfirmed) sendJoin(); }, 1000);
 
   channel.onmessage = (e) => {
     const msg = e.data;
     if (msg.type === 'joined' && msg.name === name) {
+      joinConfirmed = true;
+      clearInterval(joinRetry);
       document.getElementById('student-welcome').textContent = `¡Bienvenido, ${name}!`;
       showScreen('screen-student-wait');
     } else if (msg.type === 'question') {
+      joinConfirmed = true;
+      clearInterval(joinRetry);
       showStudentQuestion(msg);
     } else if (msg.type === 'reveal') {
       showStudentReveal(msg);
@@ -1431,11 +1441,8 @@ function joinGame() {
     }
   };
 
-  setTimeout(() => {
-    if (document.getElementById('screen-student-wait').classList.contains('active')) return;
-    document.getElementById('student-welcome').textContent = `¡Bienvenido, ${name}!`;
-    showScreen('screen-student-wait');
-  }, 2000);
+  // Parar reintentos tras 30 segundos
+  setTimeout(() => clearInterval(joinRetry), 30000);
 }
 
 // Auto-join from QR URL
