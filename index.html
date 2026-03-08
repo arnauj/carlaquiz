@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carla Quiz — Tu Kahoot con IA</title>
+<meta name="description" content="Crea quizzes interactivos con IA, comparte un QR y juega en tiempo real con tu clase.">
+<meta name="theme-color" content="#0d0b1a">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d0b1a;--surface:#1a1730;--surface2:#252142;
+  --pink:#ff3cac;--blue:#2b86c5;--cyan:#00ffc8;--yellow:#ffe156;--orange:#ff6b35;
+  --red:#ff4757;--green:#2ed573;--purple:#a855f7;--white:#f0eeff;
+  --radius:16px;
+}
+html,body{height:100%;font-family:'Fredoka',sans-serif;background:var(--bg);color:var(--white);overflow-x:hidden}
+
+/* NOISE OVERLAY */
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+background:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+opacity:.5}
+
+/* ANIMATED GRADIENT BG */
+.bg-glow{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.bg-glow .orb{position:absolute;border-radius:50%;filter:blur(120px);opacity:.15;animation:float 12s ease-in-out infinite}
+.bg-glow .orb:nth-child(1){width:500px;height:500px;background:var(--pink);top:-10%;left:-10%;animation-delay:0s}
+.bg-glow .orb:nth-child(2){width:400px;height:400px;background:var(--cyan);bottom:-10%;right:-10%;animation-delay:-4s}
+.bg-glow .orb:nth-child(3){width:350px;height:350px;background:var(--purple);top:50%;left:50%;animation-delay:-8s}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.1)}66%{transform:translate(-20px,40px) scale(.9)}}
+
+#app{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+
+/* HEADER */
+.logo{font-size:2.8rem;font-weight:700;letter-spacing:-1px;
+background:linear-gradient(135deg,var(--pink),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+margin:20px 0 5px;text-align:center}
+.subtitle{font-family:'Space Mono',monospace;font-size:.85rem;color:rgba(240,238,255,.5);letter-spacing:2px;text-transform:uppercase;margin-bottom:30px;text-align:center}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);padding:30px;width:100%;max-width:800px;
+box-shadow:0 8px 32px rgba(0,0,0,.3);backdrop-filter:blur(10px);margin-bottom:20px;animation:fadeUp .5s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;border:none;border-radius:12px;font-family:'Fredoka';font-size:1rem;font-weight:600;cursor:pointer;
+transition:all .2s;position:relative;overflow:hidden}
+.btn:active{transform:scale(.96)}
+.btn-primary{background:linear-gradient(135deg,var(--pink),var(--purple));color:#fff;box-shadow:0 4px 20px rgba(255,60,172,.3)}
+.btn-primary:hover{box-shadow:0 6px 30px rgba(255,60,172,.5);transform:translateY(-2px)}
+.btn-green{background:linear-gradient(135deg,var(--green),var(--cyan));color:var(--bg)}
+.btn-green:hover{box-shadow:0 6px 30px rgba(46,213,115,.4);transform:translateY(-2px)}
+.btn-orange{background:linear-gradient(135deg,var(--orange),var(--yellow));color:var(--bg)}
+.btn-orange:hover{box-shadow:0 6px 30px rgba(255,107,53,.4);transform:translateY(-2px)}
+.btn-ghost{background:rgba(255,255,255,.06);color:var(--white);border:1px solid rgba(255,255,255,.1)}
+.btn-ghost:hover{background:rgba(255,255,255,.1)}
+.btn-sm{padding:10px 18px;font-size:.85rem;border-radius:10px}
+.btn-danger{background:rgba(255,71,87,.15);color:var(--red);border:1px solid rgba(255,71,87,.2)}
+.btn-danger:hover{background:rgba(255,71,87,.25)}
+
+/* INPUTS */
+input[type="text"],input[type="number"],textarea,select{
+width:100%;padding:14px 18px;background:var(--surface2);border:2px solid rgba(255,255,255,.08);border-radius:12px;
+color:var(--white);font-family:'Fredoka';font-size:1rem;outline:none;transition:border .2s}
+input:focus,textarea:focus,select:focus{border-color:var(--cyan)}
+textarea{resize:vertical;min-height:80px}
+label{display:block;font-size:.85rem;font-weight:500;color:rgba(240,238,255,.6);margin-bottom:6px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:1px}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23f0eeff' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:40px}
+select option{background:var(--surface);color:var(--white)}
+
+/* GRID */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:600px){.form-row{grid-template-columns:1fr}}
+.form-group{margin-bottom:16px}
+
+/* QUESTION LIST */
+.q-item{background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:12px;border-left:4px solid var(--cyan);
+display:flex;align-items:flex-start;gap:12px;animation:fadeUp .3s ease}
+.q-item .q-num{background:var(--cyan);color:var(--bg);font-weight:700;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.9rem}
+.q-item .q-body{flex:1;min-width:0}
+.q-item .q-text{font-weight:600;margin-bottom:6px;word-wrap:break-word}
+.q-item .q-answers{display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:.8rem;color:rgba(240,238,255,.5)}
+.q-item .q-answers .correct{color:var(--green);font-weight:600}
+.q-item .q-actions{display:flex;gap:6px;flex-shrink:0}
+.q-item .q-actions button{background:none;border:none;cursor:pointer;color:rgba(240,238,255,.4);font-size:1.1rem;padding:4px;transition:color .2s}
+.q-item .q-actions button:hover{color:var(--white)}
+
+/* ANSWER OPTIONS GAME */
+.answers-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}
+@media(max-width:500px){.answers-grid{grid-template-columns:1fr}}
+.answer-btn{padding:20px;border:none;border-radius:14px;font-family:'Fredoka';font-size:1.1rem;font-weight:600;cursor:pointer;
+color:#fff;transition:all .2s;position:relative;overflow:hidden;text-align:center;min-height:70px;display:flex;align-items:center;justify-content:center}
+.answer-btn:hover{transform:scale(1.02);filter:brightness(1.15)}
+.answer-btn:active{transform:scale(.97)}
+.answer-btn.a0{background:linear-gradient(135deg,#e74c3c,#c0392b)}
+.answer-btn.a1{background:linear-gradient(135deg,#2b86c5,#2980b9)}
+.answer-btn.a2{background:linear-gradient(135deg,#f39c12,#e67e22)}
+.answer-btn.a3{background:linear-gradient(135deg,#27ae60,#229954)}
+.answer-btn.selected{outline:4px solid var(--white);outline-offset:2px}
+.answer-btn.correct-reveal{outline:4px solid var(--green);outline-offset:2px;box-shadow:0 0 30px rgba(46,213,115,.4)}
+.answer-btn.wrong-reveal{opacity:.4;filter:grayscale(.5)}
+
+/* TIMER */
+.timer-bar{width:100%;height:8px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin:16px 0}
+.timer-bar .fill{height:100%;border-radius:99px;transition:width .5s linear;background:linear-gradient(90deg,var(--green),var(--yellow),var(--red))}
+
+/* SCOREBOARD */
+.score-row{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface2);border-radius:12px;margin-bottom:8px}
+.score-row .rank{font-size:1.4rem;font-weight:700;width:40px;text-align:center}
+.score-row .rank.gold{color:var(--yellow)}
+.score-row .rank.silver{color:#c0c0c0}
+.score-row .rank.bronze{color:#cd7f32}
+.score-row .name{flex:1;font-weight:600;font-size:1.1rem}
+.score-row .pts{font-family:'Space Mono',monospace;color:var(--cyan);font-weight:700}
+
+/* QR */
+#qr-container{display:flex;flex-direction:column;align-items:center;gap:16px;margin:20px 0}
+#qr-container canvas,#qr-container img{border-radius:12px;border:4px solid var(--white)}
+.pin-display{font-family:'Space Mono',monospace;font-size:3rem;font-weight:700;letter-spacing:8px;color:var(--cyan);text-align:center}
+
+/* PLAYER JOIN */
+.player-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.player-chip{background:var(--surface2);border:1px solid rgba(255,255,255,.1);border-radius:99px;padding:8px 16px;font-size:.9rem;font-weight:500;
+animation:popIn .3s cubic-bezier(.68,-.55,.27,1.55)}
+@keyframes popIn{from{transform:scale(0)}to{transform:scale(1)}}
+
+/* LOADING SPINNER */
+.spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,.1);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;margin:20px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* CONFETTI */
+.confetti-container{position:fixed;inset:0;z-index:999;pointer-events:none;overflow:hidden}
+.confetti-piece{position:absolute;width:10px;height:10px;top:-20px;animation:confettiFall 3s ease-in forwards}
+@keyframes confettiFall{to{top:110vh;transform:rotate(720deg) translateX(100px)}}
+
+/* TABS */
+.tabs{display:flex;gap:4px;background:var(--surface2);border-radius:12px;padding:4px;margin-bottom:20px}
+.tab{flex:1;padding:10px;text-align:center;border-radius:10px;cursor:pointer;font-weight:500;font-size:.9rem;transition:all .2s;color:rgba(240,238,255,.5)}
+.tab.active{background:linear-gradient(135deg,var(--pink),var(--purple));color:#fff}
+
+/* SCREEN TRANSITIONS */
+.screen{display:none;width:100%;max-width:800px;animation:fadeUp .4s ease}
+.screen.active{display:block}
+
+/* MISC */
+.text-center{text-align:center}
+.text-muted{color:rgba(240,238,255,.5)}
+.mt-1{margin-top:8px}.mt-2{margin-top:16px}.mt-3{margin-top:24px}.mb-1{margin-bottom:8px}.mb-2{margin-bottom:16px}
+.flex-center{display:flex;align-items:center;justify-content:center;gap:12px}
+.badge{display:inline-block;padding:4px 10px;border-radius:8px;font-size:.75rem;font-weight:600;font-family:'Space Mono',monospace}
+.badge-cyan{background:rgba(0,255,200,.12);color:var(--cyan)}
+.badge-pink{background:rgba(255,60,172,.12);color:var(--pink)}
+.divider{height:1px;background:rgba(255,255,255,.08);margin:20px 0}
+.emoji-big{font-size:3rem;margin-bottom:10px}
+
+/* STUDENT VIEW */
+.student-waiting{display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 20px;text-align:center}
+.student-waiting .pulse{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--pink),var(--purple));
+animation:pulse 2s ease-in-out infinite;display:flex;align-items:center;justify-content:center;font-size:2rem}
+@keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,60,172,.4)}50%{transform:scale(1.05);box-shadow:0 0 0 20px rgba(255,60,172,0)}}
+
+/* PDF UPLOAD ZONE */
+.pdf-upload-zone{border:2px dashed rgba(255,255,255,.12);border-radius:12px;padding:24px;text-align:center;cursor:pointer;
+transition:all .2s;background:rgba(255,255,255,.02)}
+.pdf-upload-zone:hover{border-color:var(--cyan);background:rgba(0,255,200,.03)}
+.pdf-upload-zone.dragover{border-color:var(--cyan);background:rgba(0,255,200,.06);transform:scale(1.01)}
+.pdf-upload-zone p{font-size:.95rem;margin-bottom:4px}
+
+/* PROVIDER TOGGLE */
+.provider-toggle{display:flex;gap:8px;flex-wrap:wrap}
+.provider-opt{flex:1;min-width:200px;padding:14px 16px;background:var(--surface2);border:2px solid rgba(255,255,255,.08);border-radius:12px;cursor:pointer;
+display:flex;align-items:center;gap:8px;font-size:.95rem;font-weight:500;transition:all .2s}
+.provider-opt:hover{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.06)}
+.provider-opt.active{border-color:var(--cyan);background:rgba(0,255,200,.06);box-shadow:0 0 20px rgba(0,255,200,.08)}
+.provider-opt .provider-icon{font-size:1.2rem}
+.provider-config{animation:fadeUp .3s ease}
+
+.hidden{display:none!important}
+
+/* TOAST NOTIFICATIONS */
+.toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:14px 20px;border-radius:12px;font-family:'Fredoka';font-size:.9rem;font-weight:500;
+animation:slideInRight .3s ease,fadeOut .3s ease 2.7s forwards;max-width:360px;
+box-shadow:0 8px 32px rgba(0,0,0,.4);backdrop-filter:blur(12px)}
+.toast-success{background:rgba(46,213,115,.15);border:1px solid rgba(46,213,115,.3);color:var(--green)}
+.toast-error{background:rgba(255,71,87,.15);border:1px solid rgba(255,71,87,.3);color:var(--red)}
+.toast-info{background:rgba(0,255,200,.1);border:1px solid rgba(0,255,200,.2);color:var(--cyan)}
+@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes fadeOut{to{opacity:0;transform:translateY(-10px)}}
+
+/* EDIT MODAL */
+.modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s ease}
+.modal-content{background:var(--surface);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);padding:30px;width:100%;max-width:560px;
+box-shadow:0 24px 64px rgba(0,0,0,.5);animation:fadeUp .3s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* API KEY STORAGE INDICATOR */
+.key-stored{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;font-size:.75rem;font-weight:600;
+background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Space Mono',monospace}
+
+/* RESPONSIVE IMPROVEMENTS */
+@media(max-width:480px){
+.logo{font-size:2rem}
+.card{padding:20px}
+.pin-display{font-size:2rem;letter-spacing:4px}
+.btn{padding:12px 20px;font-size:.9rem}
+.answer-btn{padding:14px;font-size:.95rem;min-height:56px}
+.provider-opt{min-width:100%}
+}
+</style>
+
+</head>
+<body>
+<div class="bg-glow"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+<div class="toast-container" id="toast-container"></div>
+
+<div id="app">
+  <div class="logo">📚 Carla Quiz</div>
+  <div class="subtitle">Tu Quiz interactivo con IA</div>
+
+  <!-- ========== SCREEN: HOME ========== -->
+
+  <div id="screen-home" class="screen active">
+    <div class="card text-center">
+      <div class="emoji-big">🎯</div>
+      <h2 style="font-size:1.6rem;margin-bottom:8px">Crea tu Quiz en segundos</h2>
+      <p class="text-muted mb-2">Genera preguntas con IA desde un tema o un PDF, comparte un QR y juega con tu clase</p>
+      <div class="flex-center" style="flex-wrap:wrap;gap:12px;margin-top:20px">
+        <button class="btn btn-primary" onclick="showScreen('screen-create')">🚀 Crear Cuestionario</button>
+        <button class="btn btn-ghost" onclick="showScreen('screen-join')">📱 Unirse como alumno</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: CREATE QUIZ ========== -->
+
+  <div id="screen-create" class="screen">
+    <div class="card">
+      <div class="flex-center mb-2" style="justify-content:space-between">
+        <h2>📝 Crear Cuestionario</h2>
+        <button class="btn btn-ghost btn-sm" onclick="showScreen('screen-home')">← Volver</button>
+      </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('tab-ai',this)">🤖 Generar con IA</div>
+    <div class="tab" onclick="switchTab('tab-manual',this)">✏️ Añadir manual</div>
+  </div>
+
+  <!-- TAB: AI -->
+  <div id="tab-ai" class="tab-content">
+    <div class="form-group">
+      <label>Tema del quiz</label>
+      <input type="text" id="ai-topic" placeholder="Ej: La Revolución Francesa, Fotosíntesis... (opcional si adjuntas PDF)">
+    </div>
+    <div class="form-group">
+      <label>📄 Adjuntar PDF (opcional)</label>
+      <div class="pdf-upload-zone" id="pdf-drop-zone" onclick="document.getElementById('pdf-input').click()">
+        <input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="handlePdfUpload(this)">
+        <div id="pdf-placeholder">
+          <div style="font-size:2rem;margin-bottom:8px">📄</div>
+          <p>Arrastra un PDF aquí o haz clic para seleccionar</p>
+          <small class="text-muted">La IA extraerá preguntas del contenido del PDF</small>
+        </div>
+        <div id="pdf-loaded" class="hidden">
+          <div style="display:flex;align-items:center;gap:10px;justify-content:center">
+            <span style="font-size:1.5rem">✅</span>
+            <div>
+              <div id="pdf-filename" style="font-weight:600"></div>
+              <small class="text-muted" id="pdf-pages"></small>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();removePdf()" style="margin-left:8px">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Número de preguntas</label>
+        <select id="ai-count">
+          <option value="5">5 preguntas</option>
+          <option value="8">8 preguntas</option>
+          <option value="10" selected>10 preguntas</option>
+          <option value="15">15 preguntas</option>
+          <option value="20">20 preguntas</option>
+          <option value="30">30 preguntas</option>
+          <option value="40">40 preguntas</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Nivel</label>
+        <select id="ai-level">
+          <option value="primaria">Primaria</option>
+          <option value="ESO" selected>ESO</option>
+          <option value="bachillerato">Bachillerato</option>
+          <option value="universidad">Universidad</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Idioma</label>
+      <select id="ai-lang">
+        <option value="español" selected>Español</option>
+        <option value="inglés">Inglés</option>
+        <option value="francés">Francés</option>
+        <option value="catalán">Catalán</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Proveedor de IA</label>
+      <div class="provider-toggle" id="provider-toggle">
+        <div class="provider-opt active" data-provider="google" onclick="selectProvider('google')">
+          <span class="provider-icon">🟢</span> Google Gemini <span class="badge badge-cyan" style="margin-left:4px">GRATIS</span>
+        </div>
+        <div class="provider-opt" data-provider="anthropic" onclick="selectProvider('anthropic')">
+          <span class="provider-icon">🟣</span> Claude (Anthropic)
+        </div>
+      </div>
+    </div>
+    <div id="provider-google" class="provider-config">
+      <div class="form-group">
+        <label>API Key de Google Gemini (gratuita)</label>
+        <input type="text" id="google-api-key" placeholder="AIzaSy...">
+        <small class="text-muted mt-1" style="display:block;font-size:.75rem">
+          Consigue tu key gratis en <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--cyan);text-decoration:underline"><strong>aistudio.google.com/apikey</strong></a> — sin tarjeta de crédito, sin coste.
+        </small>
+        <div id="google-key-stored" class="key-stored hidden">🔒 API Key guardada en este navegador</div>
+      </div>
+    </div>
+    <div id="provider-anthropic" class="provider-config hidden">
+      <div class="form-group">
+        <label>API Key de Anthropic</label>
+        <input type="text" id="api-key" placeholder="sk-ant-...">
+        <small class="text-muted mt-1" style="display:block;font-size:.75rem">
+          Consigue tu key en <a href="https://console.anthropic.com" target="_blank" style="color:var(--cyan);text-decoration:underline"><strong>console.anthropic.com</strong></a> (créditos iniciales gratuitos).
+        </small>
+        <div id="anthropic-key-stored" class="key-stored hidden">🔒 API Key guardada en este navegador</div>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="generateWithAI()" id="btn-generate" style="width:100%">
+      🤖 Generar preguntas con IA
+    </button>
+    <div id="ai-loading" class="hidden" style="text-align:center;margin-top:16px">
+      <div class="spinner"></div>
+      <p class="text-muted" id="ai-loading-text">La IA está creando tus preguntas...</p>
+    </div>
+    <div id="ai-error" class="hidden" style="margin-top:12px;padding:12px;background:rgba(255,71,87,.1);border-radius:10px;color:var(--red);font-size:.9rem"></div>
+  </div>
+
+  <!-- TAB: MANUAL -->
+  <div id="tab-manual" class="tab-content hidden">
+    <div class="form-group">
+      <label>Pregunta</label>
+      <input type="text" id="m-question" placeholder="Escribe la pregunta...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Respuesta A ✅</label>
+        <input type="text" id="m-a" placeholder="Respuesta correcta">
+      </div>
+      <div class="form-group">
+        <label>Respuesta B</label>
+        <input type="text" id="m-b" placeholder="Incorrecta">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Respuesta C</label>
+        <input type="text" id="m-c" placeholder="Incorrecta">
+      </div>
+      <div class="form-group">
+        <label>Respuesta D</label>
+        <input type="text" id="m-d" placeholder="Incorrecta">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Tiempo (segundos)</label>
+      <input type="number" id="m-time" value="20" min="5" max="120">
+    </div>
+    <button class="btn btn-green" onclick="addManualQuestion()" style="width:100%">➕ Añadir pregunta</button>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- QUESTIONS LIST -->
+  <div class="flex-center mb-2" style="justify-content:space-between">
+    <h3>Preguntas añadidas <span class="badge badge-cyan" id="q-count">0</span></h3>
+    <button class="btn btn-danger btn-sm" onclick="clearQuestions()" id="btn-clear" style="display:none">🗑️ Borrar todo</button>
+  </div>
+  <div id="questions-list">
+    <p class="text-muted text-center" id="no-questions">Aún no hay preguntas. ¡Genera con IA o añade manualmente!</p>
+  </div>
+
+  <div class="divider"></div>
+  <button class="btn btn-orange" onclick="startLobby()" id="btn-start-game" style="width:100%;display:none">
+    🎮 Iniciar partida
+  </button>
+</div>
+
+  </div>
+
+  <!-- ========== SCREEN: JOIN ========== -->
+
+  <div id="screen-join" class="screen">
+    <div class="card text-center">
+      <div class="emoji-big">📱</div>
+      <h2 class="mb-2">Unirse a un Quiz</h2>
+      <div class="form-group">
+        <label>PIN del juego</label>
+        <input type="text" id="join-pin" placeholder="Introduce el PIN" maxlength="6" style="text-align:center;font-size:1.5rem;font-family:'Space Mono',monospace;letter-spacing:6px" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label>Tu nombre</label>
+        <input type="text" id="join-name" placeholder="¿Cómo te llamas?" maxlength="20" style="text-align:center">
+      </div>
+      <button class="btn btn-primary" onclick="joinGame()" style="width:100%">🚀 ¡Entrar!</button>
+      <button class="btn btn-ghost btn-sm mt-2" onclick="showScreen('screen-home')">← Volver</button>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: LOBBY (Teacher) ========== -->
+
+  <div id="screen-lobby" class="screen">
+    <div class="card text-center">
+      <h2 class="mb-1">Sala de espera</h2>
+      <p class="text-muted mb-2">Los alumnos pueden escanear el QR o introducir el PIN</p>
+      <div class="pin-display" id="lobby-pin"></div>
+      <div id="qr-container"></div>
+      <div class="divider"></div>
+      <h3 class="mb-1">Jugadores conectados <span class="badge badge-pink" id="player-count">0</span></h3>
+      <div class="player-grid" id="player-list"></div>
+      <div class="divider"></div>
+      <button class="btn btn-green" onclick="startGame()" style="width:100%;font-size:1.2rem">
+        ▶️ ¡Empezar el juego!
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: GAME (Teacher Projection) ========== -->
+
+  <div id="screen-game" class="screen">
+    <div class="card">
+      <div class="flex-center mb-1" style="justify-content:space-between">
+        <span class="badge badge-cyan" id="game-progress">Pregunta 1/10</span>
+        <span class="badge badge-pink" id="game-timer-badge">⏱ 20s</span>
+      </div>
+      <div class="timer-bar"><div class="fill" id="timer-fill" style="width:100%"></div></div>
+      <h2 id="game-question" style="font-size:1.4rem;margin:16px 0;text-align:center;min-height:60px"></h2>
+      <div class="answers-grid" id="game-answers"></div>
+      <div class="mt-2 text-center">
+        <p class="text-muted" id="game-responses">0 respuestas recibidas</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: REVEAL ========== -->
+
+  <div id="screen-reveal" class="screen">
+    <div class="card text-center">
+      <h2 id="reveal-question" style="margin-bottom:16px"></h2>
+      <div class="answers-grid" id="reveal-answers"></div>
+      <div class="divider"></div>
+      <div id="reveal-stats"></div>
+      <button class="btn btn-primary mt-2" onclick="nextQuestion()" id="btn-next">Siguiente pregunta ➡️</button>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: SCOREBOARD ========== -->
+
+  <div id="screen-scoreboard" class="screen">
+    <div class="card text-center">
+      <div class="emoji-big">🏆</div>
+      <h2 class="mb-2">Clasificación</h2>
+      <div id="scoreboard-list"></div>
+      <div class="divider"></div>
+      <div class="flex-center">
+        <button class="btn btn-primary" onclick="showScreen('screen-home');resetAll()">🏠 Volver al inicio</button>
+        <button class="btn btn-ghost" onclick="continueAfterScoreboard()" id="btn-continue">Siguiente pregunta ➡️</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: FINAL ========== -->
+
+  <div id="screen-final" class="screen">
+    <div class="card text-center">
+      <div id="confetti-area"></div>
+      <div class="emoji-big">🎉</div>
+      <h1 style="font-size:2rem;margin-bottom:8px">¡Fin del juego!</h1>
+      <p class="text-muted mb-2">Aquí están los resultados finales</p>
+      <div id="final-podium" class="mt-2"></div>
+      <div class="divider"></div>
+      <div id="final-scoreboard"></div>
+      <div class="divider"></div>
+      <div class="flex-center" style="flex-wrap:wrap;gap:12px">
+        <button class="btn btn-primary" onclick="showScreen('screen-home');resetAll()">🏠 Volver al inicio</button>
+        <button class="btn btn-ghost" onclick="exportResults()">📊 Exportar resultados</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: STUDENT WAITING ========== -->
+
+  <div id="screen-student-wait" class="screen">
+    <div class="card">
+      <div class="student-waiting">
+        <div class="pulse">✓</div>
+        <h2 id="student-welcome">¡Estás dentro!</h2>
+        <p class="text-muted">Espera a que el profesor inicie el juego...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: STUDENT PLAY ========== -->
+
+  <div id="screen-student-play" class="screen">
+    <div class="card">
+      <div class="flex-center mb-1" style="justify-content:space-between">
+        <span class="badge badge-cyan" id="sp-progress"></span>
+        <span class="badge badge-pink" id="sp-score">0 pts</span>
+      </div>
+      <div class="timer-bar"><div class="fill" id="sp-timer-fill" style="width:100%"></div></div>
+      <h2 id="sp-question" style="font-size:1.2rem;margin:12px 0;text-align:center"></h2>
+      <div class="answers-grid" id="sp-answers"></div>
+      <p class="text-muted text-center mt-2" id="sp-feedback"></p>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN: STUDENT RESULT ========== -->
+
+  <div id="screen-student-result" class="screen">
+    <div class="card text-center">
+      <div class="emoji-big" id="sr-emoji">🎉</div>
+      <h2 id="sr-title">¡Fin del juego!</h2>
+      <p class="text-muted" id="sr-subtitle"></p>
+      <div class="divider"></div>
+      <div style="font-size:2.5rem;font-weight:700;color:var(--cyan)" id="sr-score"></div>
+      <p class="text-muted">puntos totales</p>
+      <button class="btn btn-primary mt-2" onclick="showScreen('screen-home')">🏠 Volver</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== EDIT QUESTION MODAL ========== -->
+
+<div id="edit-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal-content">
+    <div class="flex-center mb-2" style="justify-content:space-between">
+      <h3>✏️ Editar pregunta</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeEditModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Pregunta</label>
+      <input type="text" id="edit-question">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Respuesta A ✅</label>
+        <input type="text" id="edit-a">
+      </div>
+      <div class="form-group">
+        <label>Respuesta B</label>
+        <input type="text" id="edit-b">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Respuesta C</label>
+        <input type="text" id="edit-c">
+      </div>
+      <div class="form-group">
+        <label>Respuesta D</label>
+        <input type="text" id="edit-d">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Respuesta correcta</label>
+        <select id="edit-correct">
+          <option value="0">A</option>
+          <option value="1">B</option>
+          <option value="2">C</option>
+          <option value="3">D</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tiempo (seg)</label>
+        <input type="number" id="edit-time" value="20" min="5" max="120">
+      </div>
+    </div>
+    <button class="btn btn-green" onclick="saveEditQuestion()" style="width:100%">💾 Guardar cambios</button>
+  </div>
+</div>
+
+<script>
+// ======== STATE ========
+let questions = [];
+let gamePin = '';
+let players = {};
+let currentQ = 0;
+let timerInterval = null;
+let timeLeft = 0;
+let isTeacher = false;
+let studentName = '';
+let studentScore = 0;
+let currentQuestionStartTime = 0;
+let editingIndex = -1;
+let channel = null;
+
+function initChannel(pin) {
+  if (channel) channel.close();
+  channel = new BroadcastChannel('carlaquiz-' + pin);
+}
+
+// ======== TOAST NOTIFICATIONS ========
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ======== NAVIGATION ========
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+  document.getElementById(tabId).classList.remove('hidden');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ======== API KEY PERSISTENCE ========
+function saveApiKey(provider, key) {
+  try { sessionStorage.setItem(`carlaquiz_${provider}_key`, key); } catch(e) {}
+}
+function loadApiKey(provider) {
+  try { return sessionStorage.getItem(`carlaquiz_${provider}_key`) || ''; } catch(e) { return ''; }
+}
+function initApiKeys() {
+  const gKey = loadApiKey('google');
+  const aKey = loadApiKey('anthropic');
+  if (gKey) {
+    document.getElementById('google-api-key').value = gKey;
+    document.getElementById('google-key-stored').classList.remove('hidden');
+  }
+  if (aKey) {
+    document.getElementById('api-key').value = aKey;
+    document.getElementById('anthropic-key-stored').classList.remove('hidden');
+  }
+}
+
+// ======== PDF HANDLING ========
+let pdfTextContent = '';
+let pdfBase64Data = '';
+
+const dropZone = document.getElementById('pdf-drop-zone');
+if (dropZone) {
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault(); dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') {
+      document.getElementById('pdf-input').files = e.dataTransfer.files;
+      handlePdfUpload(document.getElementById('pdf-input'));
+    }
+  });
+}
+
+async function handlePdfUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => { pdfBase64Data = reader.result.split(',')[1]; };
+  reader.readAsDataURL(file);
+
+  try {
+    const arrayBuf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const tc = await page.getTextContent();
+      fullText += tc.items.map(item => item.str).join(' ') + '\n';
+    }
+    pdfTextContent = fullText.trim();
+
+    document.getElementById('pdf-placeholder').classList.add('hidden');
+    document.getElementById('pdf-loaded').classList.remove('hidden');
+    document.getElementById('pdf-filename').textContent = file.name;
+    document.getElementById('pdf-pages').textContent = `${pdf.numPages} página${pdf.numPages > 1 ? 's' : ''} · ${(pdfTextContent.length / 1000).toFixed(0)}k caracteres extraídos`;
+    showToast('PDF cargado correctamente', 'success');
+  } catch (err) {
+    showToast('Error al leer el PDF: ' + err.message, 'error');
+    removePdf();
+  }
+}
+
+function removePdf() {
+  pdfTextContent = '';
+  pdfBase64Data = '';
+  document.getElementById('pdf-input').value = '';
+  document.getElementById('pdf-placeholder').classList.remove('hidden');
+  document.getElementById('pdf-loaded').classList.add('hidden');
+}
+
+// ======== PROVIDER SELECTION ========
+let selectedProvider = 'google';
+
+function selectProvider(provider) {
+  selectedProvider = provider;
+  document.querySelectorAll('.provider-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.provider === provider);
+  });
+  document.getElementById('provider-google').classList.toggle('hidden', provider !== 'google');
+  document.getElementById('provider-anthropic').classList.toggle('hidden', provider !== 'anthropic');
+}
+
+// ======== AI GENERATION ========
+function buildPrompt(topic, count, level, lang, pdfText) {
+  let contextBlock = '';
+  if (pdfText) {
+    const truncated = pdfText.length > 30000 ? pdfText.substring(0, 30000) + '\n[...contenido truncado...]' : pdfText;
+    contextBlock = `\n\nBASA LAS PREGUNTAS EN EL SIGUIENTE CONTENIDO DEL PDF:\n---\n${truncated}\n---\n`;
+    if (topic) {
+      contextBlock += `\nEnfócate especialmente en el tema: "${topic}".\n`;
+    }
+  }
+
+  const topicLine = pdfText
+    ? (topic ? `sobre "${topic}" basándote en el contenido del PDF adjunto` : 'basándote en el contenido del PDF adjunto')
+    : `sobre: "${topic}"`;
+
+  return `Genera exactamente ${count} preguntas de quiz tipo test ${topicLine}.
+Nivel educativo: ${level}. Idioma: ${lang}.
+${contextBlock}
+Responde SOLO con un JSON array (sin markdown, sin backticks, sin texto extra). Cada elemento:
+{"question":"texto","answers":["opA","opB","opC","opD"],"correct":0,"time":20}
+
+donde "correct" es el índice (0-3) de la respuesta correcta.
+Las preguntas deben ser variadas, claras y adecuadas al nivel. Las opciones incorrectas deben ser plausibles pero claramente erróneas.
+Asegúrate de que las 4 opciones de cada pregunta sean distintas entre sí.`;
+}
+
+// ======== SAFE FETCH (catches network errors like "Load failed") ========
+async function safeFetch(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (networkErr) {
+    // "Load failed", "Failed to fetch", "NetworkError", etc.
+    const msg = networkErr.message || 'Error de red';
+    if (msg.includes('Load failed') || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('TypeError')) {
+      throw new Error('NETWORK_ERROR');
+    }
+    throw networkErr;
+  }
+}
+
+async function callGeminiWithModel(apiKey, prompt, modelName) {
+  const res = await safeFetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 16000,
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = err.error?.message || `Error ${res.status}`;
+    if (res.status === 403) {
+      throw new Error('REGION_BLOCKED');
+    }
+    if ((res.status === 400 || res.status === 404) && (msg.includes('not found') || msg.includes('is not found'))) {
+      throw new Error('MODEL_NOT_FOUND');
+    }
+    if (res.status === 429 || msg.includes('RESOURCE_EXHAUSTED')) {
+      throw new Error('RATE_LIMITED');
+    }
+    throw new Error(msg);
+  }
+
+  const data = await res.json();
+  const candidate = data.candidates?.[0];
+  if (!candidate) throw new Error('No se recibió respuesta de Gemini');
+  return candidate.content?.parts?.map(p => p.text || '').join('') || '';
+}
+
+async function callGemini(apiKey, prompt) {
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  let lastError;
+  for (const model of models) {
+    try {
+      document.getElementById('ai-loading-text').textContent = `Conectando con ${model}...`;
+      return await callGeminiWithModel(apiKey, prompt, model);
+    } catch (err) {
+      lastError = err;
+      if (err.message === 'NETWORK_ERROR' || err.message === 'REGION_BLOCKED' || err.message === 'RATE_LIMITED') throw err;
+      if (err.message !== 'MODEL_NOT_FOUND') throw err;
+    }
+  }
+  throw lastError;
+}
+
+async function callClaude(apiKey, prompt, pdfBase64) {
+  const contentParts = [];
+  if (pdfBase64) {
+    contentParts.push({
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 }
+    });
+  }
+  contentParts.push({ type: 'text', text: prompt });
+
+  const res = await safeFetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      messages: [{ role: 'user', content: contentParts }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Error ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.content.map(c => c.text || '').join('');
+}
+
+async function generateWithAI() {
+  const topic = document.getElementById('ai-topic').value.trim();
+  const count = document.getElementById('ai-count').value;
+  const level = document.getElementById('ai-level').value;
+  const lang = document.getElementById('ai-lang').value;
+  const hasPdf = pdfTextContent.length > 0;
+
+  if (!topic && !hasPdf) { showToast('Escribe un tema o adjunta un PDF', 'error'); return; }
+
+  let apiKey;
+  if (selectedProvider === 'google') {
+    apiKey = document.getElementById('google-api-key').value.trim();
+    if (!apiKey) { showToast('Necesitas una API Key de Google Gemini', 'error'); return; }
+    saveApiKey('google', apiKey);
+    document.getElementById('google-key-stored').classList.remove('hidden');
+  } else {
+    apiKey = document.getElementById('api-key').value.trim();
+    if (!apiKey) { showToast('Necesitas una API Key de Anthropic', 'error'); return; }
+    saveApiKey('anthropic', apiKey);
+    document.getElementById('anthropic-key-stored').classList.remove('hidden');
+  }
+
+  document.getElementById('btn-generate').classList.add('hidden');
+  document.getElementById('ai-loading').classList.remove('hidden');
+  document.getElementById('ai-error').classList.add('hidden');
+  document.getElementById('ai-loading-text').textContent = `La IA está creando ${count} preguntas...`;
+
+  const promptForGemini = buildPrompt(topic, count, level, lang, hasPdf ? pdfTextContent : '');
+  const promptForClaude = buildPrompt(topic, count, level, lang, (hasPdf && !pdfBase64Data) ? pdfTextContent : '');
+
+  try {
+    let rawText;
+    if (selectedProvider === 'google') {
+      rawText = await callGemini(apiKey, promptForGemini);
+    } else {
+      rawText = await callClaude(apiKey, promptForClaude, hasPdf ? pdfBase64Data : '');
+    }
+
+    const clean = rawText.replace(/```json|```/g, '').trim();
+    const generated = JSON.parse(clean);
+
+    if (!Array.isArray(generated) || generated.length === 0) throw new Error('No se generaron preguntas');
+
+    // Validate and sanitize
+    let validCount = 0;
+    generated.forEach(q => {
+      if (q.question && Array.isArray(q.answers) && q.answers.length === 4 && typeof q.correct === 'number' && q.correct >= 0 && q.correct <= 3) {
+        questions.push({
+          question: q.question.trim(),
+          answers: q.answers.map(a => String(a).trim()),
+          correct: q.correct,
+          time: Math.min(120, Math.max(5, q.time || 20))
+        });
+        validCount++;
+      }
+    });
+
+    if (validCount === 0) throw new Error('No se pudieron validar las preguntas generadas');
+
+    renderQuestions();
+    showToast(`${validCount} preguntas generadas correctamente`, 'success');
+  } catch (err) {
+    let errorMsg = '❌ ' + err.message;
+    const msg = err.message || '';
+
+    // Network-level error (CORS, blocked, no internet, file:// protocol)
+    if (msg === 'NETWORK_ERROR') {
+      if (selectedProvider === 'google') {
+        errorMsg = `⚠️ <strong>Error de conexión con la API de Gemini ("Load failed")</strong><br><br>Esto suele ocurrir por uno de estos motivos:<br><br><strong>1. Estás en la UE/España</strong> — La API gratuita de Gemini NO funciona en la UE por temas de privacidad (GDPR).<br>→ <strong>Solución:</strong> Cambia a <strong>Claude (Anthropic)</strong> como proveedor de IA.<br><br><strong>2. Abres el archivo como file://</strong> — Algunas funciones no funcionan abriendo el HTML directamente.<br>→ <strong>Solución:</strong> Usa un servidor local. En terminal escribe:<br><code style="background:rgba(0,255,200,.1);padding:2px 6px;border-radius:4px">python3 -m http.server 8000</code> y abre <code style="background:rgba(0,255,200,.1);padding:2px 6px;border-radius:4px">localhost:8000</code><br><br><strong>3. Extensión del navegador bloqueando</strong> — Adblockers o extensiones de privacidad pueden bloquear la petición.`;
+      } else {
+        errorMsg = `⚠️ <strong>Error de conexión con la API de Anthropic ("Load failed")</strong><br><br>Posibles causas:<br>• Abriste el archivo como <code>file://</code> — Usa un servidor local.<br>• Extensión del navegador bloqueando la petición.<br>• Problema temporal de red.`;
+      }
+    } else if (selectedProvider === 'google') {
+      if (msg === 'REGION_BLOCKED') {
+        errorMsg = '⚠️ <strong>Acceso denegado (403)</strong><br><br>La API gratuita de Gemini <strong>no está disponible en la UE/España</strong>.<br><br>Opciones:<br>• Cambia a <strong>Claude (Anthropic)</strong> como proveedor.<br>• Activa facturación en Google Cloud (plan de pago).';
+      } else if (msg === 'RATE_LIMITED') {
+        errorMsg = '❌ Has superado el límite de peticiones. Espera 1 minuto e inténtalo de nuevo, o reduce el número de preguntas.';
+      } else if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+        errorMsg = '❌ API Key de Google inválida. Comprueba que la copiaste bien desde aistudio.google.com/apikey';
+      }
+    } else {
+      if (msg.includes('invalid x-api-key') || msg.includes('authentication')) {
+        errorMsg = '❌ API Key de Anthropic inválida. Comprueba que la copiaste bien desde console.anthropic.com';
+      } else if (msg.includes('credit') || msg.includes('billing')) {
+        errorMsg = '❌ Sin créditos en Anthropic. Comprueba tu saldo en console.anthropic.com';
+      }
+    }
+    document.getElementById('ai-error').innerHTML = errorMsg;
+    document.getElementById('ai-error').classList.remove('hidden');
+  } finally {
+    document.getElementById('btn-generate').classList.remove('hidden');
+    document.getElementById('ai-loading').classList.add('hidden');
+  }
+}
+
+// ======== MANUAL QUESTIONS ========
+function addManualQuestion() {
+  const q = document.getElementById('m-question').value.trim();
+  const a = document.getElementById('m-a').value.trim();
+  const b = document.getElementById('m-b').value.trim();
+  const c = document.getElementById('m-c').value.trim();
+  const d = document.getElementById('m-d').value.trim();
+  const t = parseInt(document.getElementById('m-time').value) || 20;
+
+  if (!q || !a || !b || !c || !d) { showToast('Rellena todos los campos', 'error'); return; }
+
+  questions.push({ question: q, answers: [a, b, c, d], correct: 0, time: Math.min(120, Math.max(5, t)) });
+  ['m-question','m-a','m-b','m-c','m-d'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('m-question').focus();
+  renderQuestions();
+  showToast('Pregunta añadida', 'success');
+}
+
+function renderQuestions() {
+  const list = document.getElementById('questions-list');
+  const noQ = document.getElementById('no-questions');
+  document.getElementById('q-count').textContent = questions.length;
+  document.getElementById('btn-clear').style.display = questions.length ? '' : 'none';
+  document.getElementById('btn-start-game').style.display = questions.length >= 1 ? '' : 'none';
+
+  if (!questions.length) { noQ.classList.remove('hidden'); list.innerHTML = ''; return; }
+  noQ.classList.add('hidden');
+
+  list.innerHTML = questions.map((q, i) => `
+    <div class="q-item">
+      <div class="q-num">${i + 1}</div>
+      <div class="q-body">
+        <div class="q-text">${esc(q.question)}</div>
+        <div class="q-answers">
+          ${q.answers.map((a, j) => `<span class="${j === q.correct ? 'correct' : ''}">• ${esc(a)}</span>`).join('')}
+        </div>
+      </div>
+      <div class="q-actions">
+        <button onclick="openEditModal(${i})" title="Editar">✏️</button>
+        <button onclick="moveQuestion(${i},-1)" title="Subir" ${i === 0 ? 'disabled style="opacity:.2"' : ''}>⬆️</button>
+        <button onclick="moveQuestion(${i},1)" title="Bajar" ${i === questions.length - 1 ? 'disabled style="opacity:.2"' : ''}>⬇️</button>
+        <button onclick="removeQuestion(${i})" title="Eliminar">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function removeQuestion(i) { questions.splice(i, 1); renderQuestions(); }
+function clearQuestions() { if(confirm('¿Borrar todas las preguntas?')){questions=[];renderQuestions();} }
+function moveQuestion(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= questions.length) return;
+  [questions[i], questions[j]] = [questions[j], questions[i]];
+  renderQuestions();
+}
+
+// ======== EDIT MODAL ========
+function openEditModal(i) {
+  editingIndex = i;
+  const q = questions[i];
+  document.getElementById('edit-question').value = q.question;
+  document.getElementById('edit-a').value = q.answers[0];
+  document.getElementById('edit-b').value = q.answers[1];
+  document.getElementById('edit-c').value = q.answers[2];
+  document.getElementById('edit-d').value = q.answers[3];
+  document.getElementById('edit-correct').value = q.correct;
+  document.getElementById('edit-time').value = q.time;
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.add('hidden');
+  editingIndex = -1;
+}
+function saveEditQuestion() {
+  if (editingIndex < 0) return;
+  const q = document.getElementById('edit-question').value.trim();
+  const a = document.getElementById('edit-a').value.trim();
+  const b = document.getElementById('edit-b').value.trim();
+  const c = document.getElementById('edit-c').value.trim();
+  const d = document.getElementById('edit-d').value.trim();
+  if (!q || !a || !b || !c || !d) { showToast('Rellena todos los campos', 'error'); return; }
+  questions[editingIndex] = {
+    question: q,
+    answers: [a, b, c, d],
+    correct: parseInt(document.getElementById('edit-correct').value),
+    time: Math.min(120, Math.max(5, parseInt(document.getElementById('edit-time').value) || 20))
+  };
+  closeEditModal();
+  renderQuestions();
+  showToast('Pregunta actualizada', 'success');
+}
+
+// ======== LOBBY ========
+function startLobby() {
+  if (!questions.length) return;
+  isTeacher = true;
+  gamePin = String(Math.floor(100000 + Math.random() * 900000));
+  players = {};
+  currentQ = 0;
+
+  initChannel(gamePin);
+
+  document.getElementById('lobby-pin').textContent = gamePin;
+  document.getElementById('player-list').innerHTML = '';
+  document.getElementById('player-count').textContent = '0';
+
+  const qrDiv = document.getElementById('qr-container');
+  qrDiv.innerHTML = '';
+  const joinUrl = window.location.href.split('?')[0] + '?pin=' + gamePin;
+  new QRCode(qrDiv, {
+    text: joinUrl,
+    width: 200,
+    height: 200,
+    colorDark: '#0d0b1a',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+
+  channel.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === 'join') {
+      if (!players[msg.name]) {
+        players[msg.name] = { score: 0, answers: [], streak: 0 };
+        renderPlayers();
+        channel.postMessage({ type: 'joined', name: msg.name });
+        showToast(`${msg.name} se ha unido`, 'info');
+      }
+    } else if (msg.type === 'answer') {
+      handleStudentAnswer(msg.name, msg.answerIndex, msg.timeSpent);
+    }
+  };
+
+  showScreen('screen-lobby');
+}
+
+function renderPlayers() {
+  const list = document.getElementById('player-list');
+  const names = Object.keys(players);
+  document.getElementById('player-count').textContent = names.length;
+  list.innerHTML = names.map(n => `<div class="player-chip">👤 ${esc(n)}</div>`).join('');
+}
+
+// ======== JOIN GAME (Student) ========
+function joinGame() {
+  const pin = document.getElementById('join-pin').value.trim();
+  const name = document.getElementById('join-name').value.trim();
+  if (!pin || !name) { showToast('Rellena el PIN y tu nombre', 'error'); return; }
+
+  isTeacher = false;
+  gamePin = pin;
+  studentName = name;
+  studentScore = 0;
+
+  initChannel(pin);
+  channel.postMessage({ type: 'join', name });
+
+  channel.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === 'joined' && msg.name === name) {
+      document.getElementById('student-welcome').textContent = `¡Bienvenido, ${name}!`;
+      showScreen('screen-student-wait');
+    } else if (msg.type === 'question') {
+      showStudentQuestion(msg);
+    } else if (msg.type === 'reveal') {
+      showStudentReveal(msg);
+    } else if (msg.type === 'gameover') {
+      showStudentFinal();
+    }
+  };
+
+  setTimeout(() => {
+    if (document.getElementById('screen-student-wait').classList.contains('active')) return;
+    document.getElementById('student-welcome').textContent = `¡Bienvenido, ${name}!`;
+    showScreen('screen-student-wait');
+  }, 2000);
+}
+
+// Auto-join from QR URL
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('pin')) {
+    document.getElementById('join-pin').value = params.get('pin');
+    showScreen('screen-join');
+  }
+})();
+
+// ======== GAME FLOW (Teacher) ========
+function startGame() {
+  if (Object.keys(players).length === 0) {
+    showToast('Espera a que se unan jugadores', 'error');
+    return;
+  }
+  currentQ = 0;
+  showQuestion();
+}
+
+function showQuestion() {
+  if (currentQ >= questions.length) { endGame(); return; }
+  const q = questions[currentQ];
+  timeLeft = q.time;
+  currentQuestionStartTime = Date.now();
+
+  Object.values(players).forEach(p => p.answers[currentQ] = undefined);
+
+  document.getElementById('game-progress').textContent = `Pregunta ${currentQ + 1}/${questions.length}`;
+  document.getElementById('game-timer-badge').textContent = `⏱ ${timeLeft}s`;
+  document.getElementById('game-question').textContent = q.question;
+  document.getElementById('game-responses').textContent = '0 respuestas recibidas';
+  document.getElementById('timer-fill').style.width = '100%';
+
+  const grid = document.getElementById('game-answers');
+  grid.innerHTML = q.answers.map((a, i) =>
+    `<div class="answer-btn a${i}">${esc(a)}</div>`
+  ).join('');
+
+  showScreen('screen-game');
+
+  channel.postMessage({
+    type: 'question',
+    index: currentQ,
+    question: q.question,
+    answers: q.answers,
+    time: q.time,
+    total: questions.length
+  });
+
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    document.getElementById('game-timer-badge').textContent = `⏱ ${timeLeft}s`;
+    document.getElementById('timer-fill').style.width = (timeLeft / q.time * 100) + '%';
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      revealAnswer();
+    }
+  }, 1000);
+}
+
+function handleStudentAnswer(name, answerIndex, timeSpent) {
+  if (!players[name]) return;
+  const q = questions[currentQ];
+  players[name].answers[currentQ] = answerIndex;
+
+  if (answerIndex === q.correct) {
+    const bonus = Math.max(0, Math.round((1 - timeSpent / q.time) * 500 + 500));
+    players[name].score += bonus;
+    players[name].streak = (players[name].streak || 0) + 1;
+    // Streak bonus
+    if (players[name].streak >= 3) {
+      players[name].score += 100;
+    }
+  } else {
+    players[name].streak = 0;
+  }
+
+  const answered = Object.values(players).filter(p => p.answers[currentQ] !== undefined).length;
+  document.getElementById('game-responses').textContent = `${answered}/${Object.keys(players).length} respuestas recibidas`;
+
+  if (answered >= Object.keys(players).length) {
+    clearInterval(timerInterval);
+    setTimeout(revealAnswer, 500);
+  }
+}
+
+function revealAnswer() {
+  clearInterval(timerInterval);
+  const q = questions[currentQ];
+
+  document.getElementById('reveal-question').textContent = q.question;
+  const grid = document.getElementById('reveal-answers');
+  grid.innerHTML = q.answers.map((a, i) =>
+    `<div class="answer-btn a${i} ${i === q.correct ? 'correct-reveal' : 'wrong-reveal'}">${i === q.correct ? '✅ ' : '❌ '}${esc(a)}</div>`
+  ).join('');
+
+  const counts = [0, 0, 0, 0];
+  let totalAnswered = 0;
+  Object.values(players).forEach(p => {
+    const ans = p.answers[currentQ];
+    if (ans !== undefined) { counts[ans]++; totalAnswered++; }
+  });
+
+  const totalPlayers = Object.keys(players).length;
+  const correctPct = totalAnswered > 0 ? Math.round(counts[q.correct] / totalAnswered * 100) : 0;
+
+  document.getElementById('reveal-stats').innerHTML = `
+    <div style="margin-bottom:12px">
+      <span style="font-size:1.4rem;font-weight:700;color:${correctPct >= 60 ? 'var(--green)' : correctPct >= 30 ? 'var(--yellow)' : 'var(--red)'}">${correctPct}%</span>
+      <span class="text-muted" style="font-size:.9rem"> acertaron (${counts[q.correct]}/${totalAnswered})</span>
+    </div>
+    ${counts.map((c, i) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="width:60px;font-size:.8rem;text-align:right">${['🔴 A','🔵 B','🟠 C','🟢 D'][i]}</span>
+      <div style="flex:1;height:24px;background:rgba(255,255,255,.06);border-radius:6px;overflow:hidden">
+        <div style="height:100%;width:${totalAnswered ? c / totalAnswered * 100 : 0}%;background:${['#e74c3c','#2b86c5','#f39c12','#27ae60'][i]};border-radius:6px;transition:width .5s"></div>
+      </div>
+      <span style="font-family:'Space Mono',monospace;font-size:.85rem;width:30px">${c}</span>
+    </div>`).join('')}
+  `;
+
+  const isLast = currentQ >= questions.length - 1;
+  document.getElementById('btn-next').textContent = isLast ? '🏆 Ver resultados finales' : 'Siguiente pregunta ➡️';
+
+  channel.postMessage({
+    type: 'reveal',
+    correct: q.correct,
+    scores: Object.fromEntries(Object.entries(players).map(([n, p]) => [n, p.score]))
+  });
+
+  showScreen('screen-reveal');
+}
+
+function nextQuestion() {
+  currentQ++;
+  if (currentQ >= questions.length) {
+    endGame();
+  } else {
+    showScoreboard(false);
+  }
+}
+
+function showScoreboard(isFinal) {
+  const sorted = Object.entries(players).sort((a, b) => b[1].score - a[1].score);
+  const container = isFinal ? 'final-scoreboard' : 'scoreboard-list';
+
+  document.getElementById(container).innerHTML = sorted.map(([name, data], i) => {
+    const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
+    return `<div class="score-row">
+      <div class="rank ${rankClass}">${medal}</div>
+      <div class="name">${esc(name)}</div>
+      <div class="pts">${data.score} pts</div>
+    </div>`;
+  }).join('');
+
+  if (isFinal) {
+    const top3 = sorted.slice(0, 3);
+    document.getElementById('final-podium').innerHTML = `
+      <div style="display:flex;justify-content:center;align-items:flex-end;gap:16px;margin-bottom:20px">
+        ${top3.length > 1 ? `<div style="text-align:center"><div style="font-size:2rem">🥈</div><div style="font-weight:600">${esc(top3[1][0])}</div><div style="font-family:'Space Mono',monospace;color:var(--cyan)">${top3[1][1].score}</div></div>` : ''}
+        ${top3.length > 0 ? `<div style="text-align:center"><div style="font-size:3rem">🥇</div><div style="font-weight:700;font-size:1.3rem">${esc(top3[0][0])}</div><div style="font-family:'Space Mono',monospace;color:var(--yellow);font-size:1.2rem">${top3[0][1].score}</div></div>` : ''}
+        ${top3.length > 2 ? `<div style="text-align:center"><div style="font-size:2rem">🥉</div><div style="font-weight:600">${esc(top3[2][0])}</div><div style="font-family:'Space Mono',monospace;color:var(--cyan)">${top3[2][1].score}</div></div>` : ''}
+      </div>
+    `;
+    launchConfetti();
+    showScreen('screen-final');
+  } else {
+    document.getElementById('btn-continue').style.display = currentQ < questions.length ? '' : 'none';
+    showScreen('screen-scoreboard');
+  }
+}
+
+function continueAfterScoreboard() { showQuestion(); }
+
+function endGame() {
+  channel.postMessage({ type: 'gameover' });
+  showScoreboard(true);
+}
+
+// ======== EXPORT RESULTS ========
+function exportResults() {
+  const sorted = Object.entries(players).sort((a, b) => b[1].score - a[1].score);
+  let csv = 'Posición,Nombre,Puntos,Respuestas Correctas,Total Preguntas\n';
+  sorted.forEach(([name, data], i) => {
+    const correctCount = data.answers.filter((a, qi) => a === questions[qi]?.correct).length;
+    csv += `${i + 1},${name},${data.score},${correctCount},${questions.length}\n`;
+  });
+
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `carla-quiz-resultados-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Resultados exportados', 'success');
+}
+
+// ======== STUDENT GAMEPLAY ========
+function showStudentQuestion(msg) {
+  const { index, question, answers, time, total } = msg;
+  currentQ = index;
+  timeLeft = time;
+  currentQuestionStartTime = Date.now();
+
+  document.getElementById('sp-progress').textContent = `Pregunta ${index + 1}/${total}`;
+  document.getElementById('sp-score').textContent = `${studentScore} pts`;
+  document.getElementById('sp-question').textContent = question;
+  document.getElementById('sp-feedback').textContent = '';
+  document.getElementById('sp-timer-fill').style.width = '100%';
+
+  const grid = document.getElementById('sp-answers');
+  grid.innerHTML = answers.map((a, i) =>
+    `<div class="answer-btn a${i}" onclick="studentAnswer(${i},this)">${esc(a)}</div>`
+  ).join('');
+
+  showScreen('screen-student-play');
+
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    document.getElementById('sp-timer-fill').style.width = (timeLeft / time * 100) + '%';
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      document.getElementById('sp-feedback').textContent = '⏰ ¡Se acabó el tiempo!';
+      document.querySelectorAll('#sp-answers .answer-btn').forEach(b => b.style.pointerEvents = 'none');
+    }
+  }, 1000);
+}
+
+function studentAnswer(index, el) {
+  clearInterval(timerInterval);
+  const timeSpent = (Date.now() - currentQuestionStartTime) / 1000;
+  document.querySelectorAll('#sp-answers .answer-btn').forEach(b => b.style.pointerEvents = 'none');
+  el.classList.add('selected');
+  document.getElementById('sp-feedback').textContent = '✅ ¡Respuesta enviada! Esperando...';
+
+  channel.postMessage({
+    type: 'answer',
+    name: studentName,
+    answerIndex: index,
+    timeSpent
+  });
+}
+
+function showStudentReveal(msg) {
+  const { correct, scores } = msg;
+  if (scores[studentName] !== undefined) {
+    studentScore = scores[studentName];
+  }
+
+  const btns = document.querySelectorAll('#sp-answers .answer-btn');
+  btns.forEach((b, i) => {
+    if (i === correct) b.classList.add('correct-reveal');
+    else b.classList.add('wrong-reveal');
+  });
+  document.getElementById('sp-score').textContent = `${studentScore} pts`;
+  document.getElementById('sp-feedback').textContent = `La respuesta correcta era la ${['A','B','C','D'][correct]}. Tienes ${studentScore} puntos.`;
+}
+
+function showStudentFinal() {
+  document.getElementById('sr-score').textContent = studentScore;
+  document.getElementById('sr-subtitle').textContent = `¡Buen trabajo, ${studentName}!`;
+  showScreen('screen-student-result');
+}
+
+// ======== CONFETTI ========
+function launchConfetti() {
+  const container = document.getElementById('confetti-area');
+  if (!container) return;
+  container.innerHTML = '';
+  const colors = ['#ff3cac','#00ffc8','#ffe156','#ff6b35','#a855f7','#2ed573','#2b86c5'];
+  for (let i = 0; i < 80; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = Math.random() * 2 + 's';
+    piece.style.animationDuration = (2 + Math.random() * 2) + 's';
+    piece.style.width = (6 + Math.random() * 8) + 'px';
+    piece.style.height = (6 + Math.random() * 8) + 'px';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    container.appendChild(piece);
+  }
+  setTimeout(() => container.innerHTML = '', 4000);
+}
+
+// ======== UTILS ========
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function resetAll() {
+  questions = [];
+  players = {};
+  currentQ = 0;
+  studentScore = 0;
+  clearInterval(timerInterval);
+  if (channel) channel.close();
+  channel = null;
+  renderQuestions();
+}
+
+// ======== KEYBOARD SHORTCUTS ========
+document.addEventListener('keydown', (e) => {
+  // Escape to close modal
+  if (e.key === 'Escape' && !document.getElementById('edit-modal').classList.contains('hidden')) {
+    closeEditModal();
+  }
+  // Enter in join fields
+  if (e.key === 'Enter' && document.getElementById('screen-join').classList.contains('active')) {
+    joinGame();
+  }
+});
+
+// ======== INIT ========
+initApiKeys();
+</script>
+
+</body>
+</html>
