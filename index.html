@@ -360,27 +360,38 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Respuesta A ✅</label>
-        <input type="text" id="m-a" placeholder="Respuesta correcta">
+        <label>Respuesta A</label>
+        <input type="text" id="m-a" placeholder="Opción A">
       </div>
       <div class="form-group">
         <label>Respuesta B</label>
-        <input type="text" id="m-b" placeholder="Incorrecta">
+        <input type="text" id="m-b" placeholder="Opción B">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Respuesta C</label>
-        <input type="text" id="m-c" placeholder="Incorrecta">
+        <input type="text" id="m-c" placeholder="Opción C">
       </div>
       <div class="form-group">
         <label>Respuesta D</label>
-        <input type="text" id="m-d" placeholder="Incorrecta">
+        <input type="text" id="m-d" placeholder="Opción D">
       </div>
     </div>
-    <div class="form-group">
-      <label>Tiempo (segundos)</label>
-      <input type="number" id="m-time" value="20" min="5" max="120">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Respuesta correcta</label>
+        <select id="m-correct">
+          <option value="0">A</option>
+          <option value="1">B</option>
+          <option value="2">C</option>
+          <option value="3">D</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tiempo (segundos)</label>
+        <input type="number" id="m-time" value="20" min="5" max="120">
+      </div>
     </div>
     <button class="btn btn-green" onclick="addManualQuestion()" style="width:100%">➕ Añadir pregunta</button>
   </div>
@@ -960,8 +971,10 @@ function addManualQuestion() {
 
   if (!q || !a || !b || !c || !d) { showToast('Rellena todos los campos', 'error'); return; }
 
-  questions.push({ question: q, answers: [a, b, c, d], correct: 0, time: Math.min(120, Math.max(5, t)) });
+  const correct = parseInt(document.getElementById('m-correct').value) || 0;
+  questions.push({ question: q, answers: [a, b, c, d], correct, time: Math.min(120, Math.max(5, t)) });
   ['m-question','m-a','m-b','m-c','m-d'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('m-correct').value = '0';
   document.getElementById('m-question').focus();
   renderQuestions();
   showToast('Pregunta añadida', 'success');
