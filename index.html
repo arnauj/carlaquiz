@@ -942,10 +942,17 @@ let currentQuestionStartTime = 0;
 let editingIndex = -1;
 let channel = null;
 let showRankingBetweenQuestions = true;
+let gameListeners = [];
+let processedAnswers = new Set();
+
+function stopGameListeners() {
+  gameListeners.forEach(fn => fn());
+  gameListeners = [];
+}
 
 function initChannel(pin) {
-  if (channel) channel.close();
-  channel = new BroadcastChannel('carlaquiz-' + pin);
+  stopGameListeners();
+  if (channel) { channel.close(); channel = null; }
 }
 
 // ======== TOAST NOTIFICATIONS ========
@@ -1379,12 +1386,13 @@ function saveEditQuestion() {
 // ======== LOBBY ========
 function startLobby() {
   if (!questions.length) return;
+  if (!db) { showToast('Firebase no configurado', 'error'); return; }
   isTeacher = true;
   gamePin = String(Math.floor(100000 + Math.random() * 900000));
   players = {};
   currentQ = 0;
-
-  initChannel(gamePin);
+  processedAnswers = new Set();
+  stopGameListeners();
 
   document.getElementById('lobby-pin').textContent = gamePin;
   document.getElementById('player-list').innerHTML = '';
@@ -1402,20 +1410,43 @@ function startLobby() {
     correctLevel: QRCode.CorrectLevel.H
   });
 
-  channel.onmessage = (e) => {
-    const msg = e.data;
-    if (msg.type === 'join') {
-      if (!players[msg.name]) {
-        players[msg.name] = { score: 0, answers: [], streak: 0 };
-        renderPlayers();
-        showToast(`${msg.name} se ha unido`, 'info');
-      }
-      // Siempre responde con 'joined' para confirmar (el alumno puede estar reintentando)
-      channel.postMessage({ type: 'joined', name: msg.name });
-    } else if (msg.type === 'answer') {
-      handleStudentAnswer(msg.name, msg.answerIndex, msg.timeSpent);
-    }
-  };
+  // Crear partida en Firestore
+  db.collection('games').doc(gamePin).set({
+    state: 'lobby',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  // Escuchar jugadores que se unen
+  const unsubPlayers = db.collection('games').doc(gamePin).collection('players')
+    .onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const name = change.doc.data().name;
+          if (!players[name]) {
+            players[name] = { score: 0, answers: [], streak: 0 };
+            renderPlayers();
+            showToast(`${name} se ha unido`, 'info');
+          }
+        }
+      });
+    });
+  gameListeners.push(unsubPlayers);
+
+  // Escuchar respuestas de alumnos
+  const unsubAnswers = db.collection('games').doc(gamePin).collection('answers')
+    .onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const data = change.doc.data();
+          const key = `${data.name}:${data.questionIndex}`;
+          if (data.questionIndex === currentQ && !processedAnswers.has(key)) {
+            processedAnswers.add(key);
+            handleStudentAnswer(data.name, data.answerIndex, data.timeSpent);
+          }
+        }
+      });
+    });
+  gameListeners.push(unsubAnswers);
 
   showScreen('screen-lobby');
 }
@@ -1428,44 +1459,60 @@ function renderPlayers() {
 }
 
 // ======== JOIN GAME (Student) ========
-function joinGame() {
+async function joinGame() {
   const pin = document.getElementById('join-pin').value.trim();
   const name = document.getElementById('join-name').value.trim();
   if (!pin || !name) { showToast('Rellena el PIN y tu nombre', 'error'); return; }
+  if (!db) { showToast('Firebase no configurado', 'error'); return; }
 
   isTeacher = false;
   gamePin = pin;
   studentName = name;
   studentScore = 0;
+  stopGameListeners();
 
-  initChannel(pin);
+  // Verificar que la partida existe
+  let gameDoc;
+  try {
+    gameDoc = await db.collection('games').doc(pin).get();
+  } catch(e) {
+    showToast('Error al conectar con el juego', 'error');
+    return;
+  }
+  if (!gameDoc.exists) {
+    showToast('PIN no válido o partida no encontrada', 'error');
+    return;
+  }
 
-  // Reintenta el join cada segundo hasta recibir confirmación del profesor
-  let joinConfirmed = false;
-  function sendJoin() { channel.postMessage({ type: 'join', name }); }
-  sendJoin();
-  const joinRetry = setInterval(() => { if (!joinConfirmed) sendJoin(); }, 1000);
+  // Registrar jugador en Firestore
+  const nameKey = encodeURIComponent(name);
+  try {
+    await db.collection('games').doc(pin).collection('players').doc(nameKey).set({
+      name,
+      score: 0,
+      joinedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e) {
+    showToast('Error al unirse a la partida', 'error');
+    return;
+  }
 
-  channel.onmessage = (e) => {
-    const msg = e.data;
-    if (msg.type === 'joined' && msg.name === name) {
-      joinConfirmed = true;
-      clearInterval(joinRetry);
-      document.getElementById('student-welcome').textContent = `¡Bienvenido, ${name}!`;
-      showScreen('screen-student-wait');
-    } else if (msg.type === 'question') {
-      joinConfirmed = true;
-      clearInterval(joinRetry);
-      showStudentQuestion(msg);
-    } else if (msg.type === 'reveal') {
-      showStudentReveal(msg);
-    } else if (msg.type === 'gameover') {
+  document.getElementById('student-welcome').textContent = `¡Bienvenido, ${name}!`;
+  showScreen('screen-student-wait');
+
+  // Escuchar cambios de estado del juego
+  const unsubGame = db.collection('games').doc(pin).onSnapshot(snap => {
+    const data = snap.data();
+    if (!data) return;
+    if (data.state === 'question') {
+      showStudentQuestion(data.questionData);
+    } else if (data.state === 'reveal') {
+      showStudentReveal(data.revealData);
+    } else if (data.state === 'gameover') {
       showStudentFinal();
     }
-  };
-
-  // Parar reintentos tras 30 segundos
-  setTimeout(() => clearInterval(joinRetry), 30000);
+  });
+  gameListeners.push(unsubGame);
 }
 
 // Auto-join from QR URL
@@ -1508,13 +1555,17 @@ function showQuestion() {
 
   showScreen('screen-game');
 
-  channel.postMessage({
-    type: 'question',
-    index: currentQ,
-    question: q.question,
-    answers: q.answers,
-    time: q.time,
-    total: questions.length
+  // Resetear respuestas procesadas para esta pregunta
+  processedAnswers = new Set();
+  db.collection('games').doc(gamePin).update({
+    state: 'question',
+    questionData: {
+      index: currentQ,
+      question: q.question,
+      answers: q.answers,
+      time: q.time,
+      total: questions.length
+    }
   });
 
   clearInterval(timerInterval);
@@ -1592,10 +1643,12 @@ function revealAnswer() {
   const isLast = currentQ >= questions.length - 1;
   document.getElementById('btn-next').textContent = isLast ? '🏆 Ver resultados finales' : 'Siguiente pregunta ➡️';
 
-  channel.postMessage({
-    type: 'reveal',
-    correct: q.correct,
-    scores: Object.fromEntries(Object.entries(players).map(([n, p]) => [n, p.score]))
+  db.collection('games').doc(gamePin).update({
+    state: 'reveal',
+    revealData: {
+      correct: q.correct,
+      scores: Object.fromEntries(Object.entries(players).map(([n, p]) => [n, p.score]))
+    }
   });
 
   showScreen('screen-reveal');
@@ -1646,7 +1699,7 @@ function showScoreboard(isFinal) {
 function continueAfterScoreboard() { showQuestion(); }
 
 function endGame() {
-  channel.postMessage({ type: 'gameover' });
+  db.collection('games').doc(gamePin).update({ state: 'gameover' });
   showScoreboard(true);
 }
 
@@ -1708,11 +1761,12 @@ function studentAnswer(index, el) {
   el.classList.add('selected');
   document.getElementById('sp-feedback').textContent = '✅ ¡Respuesta enviada! Esperando...';
 
-  channel.postMessage({
-    type: 'answer',
+  const nameKey = encodeURIComponent(studentName);
+  db.collection('games').doc(gamePin).collection('answers').doc(nameKey).set({
     name: studentName,
     answerIndex: index,
-    timeSpent
+    timeSpent,
+    questionIndex: currentQ
   });
 }
 
@@ -1767,8 +1821,7 @@ function resetAll() {
   currentQ = 0;
   studentScore = 0;
   clearInterval(timerInterval);
-  if (channel) channel.close();
-  channel = null;
+  stopGameListeners();
   renderQuestions();
 }
 
