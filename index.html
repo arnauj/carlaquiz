@@ -162,6 +162,17 @@ animation:popIn .3s cubic-bezier(.68,-.55,.27,1.55)}
 .divider{height:1px;background:rgba(255,255,255,.08);margin:20px 0}
 .emoji-big{font-size:3rem;margin-bottom:10px}
 
+/* GAME OPTION TOGGLE */
+.option-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface2);border-radius:12px;margin-bottom:12px}
+.option-row label{font-size:.9rem;font-weight:500;color:var(--white);cursor:pointer;font-family:'Fredoka',sans-serif;text-transform:none;letter-spacing:0;margin:0}
+.option-row .opt-desc{font-size:.75rem;color:rgba(240,238,255,.45);margin-top:2px}
+.toggle{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;background:rgba(255,255,255,.12);border-radius:99px;cursor:pointer;transition:background .2s}
+.toggle input:checked+.toggle-track{background:var(--cyan)}
+.toggle-track::after{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s}
+.toggle input:checked+.toggle-track::after{transform:translateX(20px)}
+
 /* STUDENT VIEW */
 .student-waiting{display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 20px;text-align:center}
 .student-waiting .pulse{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--pink),var(--purple));
@@ -444,6 +455,16 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
   </div>
 
   <div class="divider"></div>
+  <div class="option-row" id="opt-ranking-row" style="display:none">
+    <div>
+      <label for="opt-ranking">Mostrar ranking entre preguntas</label>
+      <div class="opt-desc">Muestra la clasificación tras cada respuesta antes de continuar</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="opt-ranking" checked onchange="showRankingBetweenQuestions=this.checked">
+      <span class="toggle-track"></span>
+    </label>
+  </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap">
     <button class="btn btn-orange" onclick="startLobby()" id="btn-start-game" style="flex:1;display:none">
       🎮 Iniciar partida
@@ -920,6 +941,7 @@ let studentScore = 0;
 let currentQuestionStartTime = 0;
 let editingIndex = -1;
 let channel = null;
+let showRankingBetweenQuestions = true;
 
 function initChannel(pin) {
   if (channel) channel.close();
@@ -1284,6 +1306,7 @@ function renderQuestions() {
   document.getElementById('q-count').textContent = questions.length;
   document.getElementById('btn-clear').style.display = questions.length ? '' : 'none';
   document.getElementById('btn-start-game').style.display = questions.length >= 1 ? '' : 'none';
+  document.getElementById('opt-ranking-row').style.display = questions.length >= 1 ? '' : 'none';
   updateSaveButtonVisibility();
 
   if (!questions.length) { noQ.classList.remove('hidden'); list.innerHTML = ''; return; }
@@ -1582,8 +1605,10 @@ function nextQuestion() {
   currentQ++;
   if (currentQ >= questions.length) {
     endGame();
-  } else {
+  } else if (showRankingBetweenQuestions) {
     showScoreboard(false);
+  } else {
+    showQuestion();
   }
 }
 
