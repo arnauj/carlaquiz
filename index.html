@@ -359,6 +359,17 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
       </select>
     </div>
     <div class="form-group">
+      <label class="toggle" style="display:flex;align-items:center;gap:12px;width:100%;cursor:pointer">
+        <div style="position:relative;width:44px;height:24px;flex-shrink:0">
+          <input type="checkbox" id="ai-images" checked>
+          <span class="toggle-track"></span>
+        </div>
+        <span style="font-size:1rem;font-weight:400;color:var(--white);font-family:'Fredoka'">
+          Incluir imágenes ilustrativas (Experimental)
+        </span>
+      </label>
+    </div>
+    <div class="form-group">
       <label>Proveedor de IA</label>
       <div class="provider-toggle" id="provider-toggle">
         <div class="provider-opt active" data-provider="google" onclick="selectProvider('google')">
@@ -405,6 +416,16 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
       <label>Pregunta</label>
       <input type="text" id="m-question" placeholder="Escribe la pregunta...">
     </div>
+    
+    <div class="form-group">
+      <label>🖼️ Imagen (opcional)</label>
+      <input type="file" id="m-image-input" accept="image/*" onchange="handleManualImageUpload(this)">
+      <div id="m-image-area" class="hidden" style="position:relative;margin-top:8px;width:fit-content">
+        <img id="m-image-preview" src="" style="max-height:150px;border-radius:8px;border:2px solid var(--cyan)">
+        <button onclick="removeManualImage()" style="position:absolute;top:-8px;right:-8px;background:var(--red);color:white;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer">✕</button>
+      </div>
+    </div>
+
     <div class="form-row">
       <div class="form-group">
         <label>Respuesta A</label>
@@ -527,6 +548,9 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
         <span class="badge badge-pink" id="game-timer-badge">⏱ 20s</span>
       </div>
       <div class="timer-bar"><div class="fill" id="timer-fill" style="width:100%"></div></div>
+      <div id="game-image-container" class="hidden" style="text-align:center;margin-bottom:12px">
+        <img id="game-image" src="" style="max-height:250px;max-width:100%;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+      </div>
       <h2 id="game-question" style="font-size:1.4rem;margin:16px 0;text-align:center;min-height:60px"></h2>
       <div class="answers-grid" id="game-answers"></div>
       <div class="mt-2 text-center">
@@ -608,6 +632,9 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
         <span class="badge badge-pink" id="sp-score">0 pts</span>
       </div>
       <div class="timer-bar"><div class="fill" id="sp-timer-fill" style="width:100%"></div></div>
+      <div id="sp-image-container" class="hidden" style="text-align:center;margin-bottom:12px">
+        <img id="sp-image" src="" style="max-height:200px;max-width:100%;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+      </div>
       <h2 id="sp-question" style="font-size:1.2rem;margin:12px 0;text-align:center"></h2>
       <div class="answers-grid" id="sp-answers"></div>
       <p class="text-muted text-center mt-2" id="sp-feedback"></p>
@@ -641,6 +668,16 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
       <label>Pregunta</label>
       <input type="text" id="edit-question">
     </div>
+
+    <div class="form-group">
+      <label>🖼️ Imagen</label>
+      <input type="file" id="edit-image-input" accept="image/*" onchange="handleEditImageUpload(this)">
+      <div id="edit-image-area" class="hidden" style="position:relative;margin-top:8px;width:fit-content">
+        <img id="edit-image-preview" src="" style="max-height:120px;border-radius:8px;border:2px solid var(--cyan)">
+        <button onclick="removeEditImage()" style="position:absolute;top:-8px;right:-8px;background:var(--red);color:white;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer">✕</button>
+      </div>
+    </div>
+    
     <div class="form-row">
       <div class="form-group">
         <label>Respuesta A ✅</label>
@@ -1078,7 +1115,7 @@ function selectProvider(provider) {
 }
 
 // ======== AI GENERATION ========
-function buildPrompt(topic, count, level, lang, pdfText) {
+function buildPrompt(topic, count, level, lang, pdfText, withImages) {
   let contextBlock = '';
   if (pdfText) {
     const truncated = pdfText.length > 30000 ? pdfText.substring(0, 30000) + '\n[...contenido truncado...]' : pdfText;
@@ -1091,12 +1128,17 @@ function buildPrompt(topic, count, level, lang, pdfText) {
   const topicLine = pdfText
     ? (topic ? `sobre "${topic}" basándote en el contenido del PDF adjunto` : 'basándote en el contenido del PDF adjunto')
     : `sobre: "${topic}"`;
+    
+  const imageInstruction = withImages 
+    ? `En un 30-50% de las preguntas, añade un campo "image_desc" con una descripción visual breve (en inglés) de una imagen o infografía que ayude a responder o ilustre el concepto. Ejemplo: "Diagram of photosynthesis process".` 
+    : '';
 
   return `Genera exactamente ${count} preguntas de quiz tipo test ${topicLine}.
 Nivel educativo: ${level}. Idioma: ${lang}.
 ${contextBlock}
+${imageInstruction}
 Responde SOLO con un JSON array (sin markdown, sin backticks, sin texto extra). Cada elemento:
-{"question":"texto","answers":["opA","opB","opC","opD"],"correct":0,"time":20}
+{"question":"texto","answers":["opA","opB","opC","opD"],"correct":0,"time":20${withImages ? ',"image_desc":"descripción en inglés (opcional)"' : ''}}
 
 donde "correct" es el índice (0-3) de la respuesta correcta.
 Las preguntas deben ser variadas, claras y adecuadas al nivel. Las opciones incorrectas deben ser plausibles pero claramente erróneas.
@@ -1207,6 +1249,7 @@ async function generateWithAI() {
   const count = document.getElementById('ai-count').value;
   const level = document.getElementById('ai-level').value;
   const lang = document.getElementById('ai-lang').value;
+  const withImages = document.getElementById('ai-images').checked;
   const hasPdf = pdfTextContent.length > 0;
 
   if (!topic && !hasPdf) { showToast('Escribe un tema o adjunta un PDF', 'error'); return; }
@@ -1229,8 +1272,8 @@ async function generateWithAI() {
   document.getElementById('ai-error').classList.add('hidden');
   document.getElementById('ai-loading-text').textContent = `La IA está creando ${count} preguntas...`;
 
-  const promptForGemini = buildPrompt(topic, count, level, lang, hasPdf ? pdfTextContent : '');
-  const promptForClaude = buildPrompt(topic, count, level, lang, (hasPdf && !pdfBase64Data) ? pdfTextContent : '');
+  const promptForGemini = buildPrompt(topic, count, level, lang, hasPdf ? pdfTextContent : '', withImages);
+  const promptForClaude = buildPrompt(topic, count, level, lang, (hasPdf && !pdfBase64Data) ? pdfTextContent : '', withImages);
 
   try {
     let rawText;
@@ -1249,11 +1292,17 @@ async function generateWithAI() {
     let validCount = 0;
     generated.forEach(q => {
       if (q.question && Array.isArray(q.answers) && q.answers.length === 4 && typeof q.correct === 'number' && q.correct >= 0 && q.correct <= 3) {
+        let imageUrl = null;
+        if (q.image_desc) {
+           const seed = Math.floor(Math.random() * 1000);
+           imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(q.image_desc)}?width=800&height=600&nologo=true&seed=${seed}`;
+        }
         questions.push({
           question: q.question.trim(),
           answers: q.answers.map(a => String(a).trim()),
           correct: q.correct,
-          time: Math.min(120, Math.max(5, q.time || 20))
+          time: Math.min(120, Math.max(5, q.time || 20)),
+          image: imageUrl
         });
         validCount++;
       }
@@ -1297,8 +1346,54 @@ async function generateWithAI() {
   }
 }
 
+// ======== IMAGE UTILS ========
+function resizeImage(file, maxWidth = 800) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); // Compress to 70% quality JPEG
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 // ======== MANUAL QUESTIONS ========
-function addManualQuestion() {
+let manualImageBase64 = '';
+
+function handleManualImageUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  resizeImage(file).then(base64 => {
+    manualImageBase64 = base64;
+    document.getElementById('m-image-preview').src = base64;
+    document.getElementById('m-image-area').classList.remove('hidden');
+  }).catch(e => showToast('Error al procesar imagen', 'error'));
+}
+
+function removeManualImage() {
+  manualImageBase64 = '';
+  document.getElementById('m-image-input').value = '';
+  document.getElementById('m-image-area').classList.add('hidden');
+}
+
+async function addManualQuestion() {
   const q = document.getElementById('m-question').value.trim();
   const a = document.getElementById('m-a').value.trim();
   const b = document.getElementById('m-b').value.trim();
@@ -1309,9 +1404,19 @@ function addManualQuestion() {
   if (!q || !a || !b || !c || !d) { showToast('Rellena todos los campos', 'error'); return; }
 
   const correct = parseInt(document.getElementById('m-correct').value) || 0;
-  questions.push({ question: q, answers: [a, b, c, d], correct, time: Math.min(120, Math.max(5, t)) });
+  questions.push({ 
+    question: q, 
+    answers: [a, b, c, d], 
+    correct, 
+    time: Math.min(120, Math.max(5, t)),
+    image: manualImageBase64 || null
+  });
+  
+  // Reset form
   ['m-question','m-a','m-b','m-c','m-d'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('m-correct').value = '0';
+  removeManualImage();
+  
   document.getElementById('m-question').focus();
   renderQuestions();
   showToast('Pregunta añadida', 'success');
@@ -1333,7 +1438,7 @@ function renderQuestions() {
     <div class="q-item">
       <div class="q-num">${i + 1}</div>
       <div class="q-body">
-        <div class="q-text">${esc(q.question)}</div>
+        <div class="q-text">${q.image ? '🖼️ ' : ''}${esc(q.question)}</div>
         <div class="q-answers">
           ${q.answers.map((a, j) => `<span class="${j === q.correct ? 'correct' : ''}">• ${esc(a)}</span>`).join('')}
         </div>
@@ -1358,6 +1463,24 @@ function moveQuestion(i, dir) {
 }
 
 // ======== EDIT MODAL ========
+let editImageBase64 = '';
+
+function handleEditImageUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  resizeImage(file).then(base64 => {
+    editImageBase64 = base64;
+    document.getElementById('edit-image-preview').src = base64;
+    document.getElementById('edit-image-area').classList.remove('hidden');
+  }).catch(e => showToast('Error al procesar imagen', 'error'));
+}
+
+function removeEditImage() {
+  editImageBase64 = '';
+  document.getElementById('edit-image-input').value = '';
+  document.getElementById('edit-image-area').classList.add('hidden');
+}
+
 function openEditModal(i) {
   editingIndex = i;
   const q = questions[i];
@@ -1368,12 +1491,23 @@ function openEditModal(i) {
   document.getElementById('edit-d').value = q.answers[3];
   document.getElementById('edit-correct').value = q.correct;
   document.getElementById('edit-time').value = q.time;
+  
+  if (q.image) {
+    editImageBase64 = q.image;
+    document.getElementById('edit-image-preview').src = q.image;
+    document.getElementById('edit-image-area').classList.remove('hidden');
+  } else {
+    removeEditImage();
+  }
+  
   document.getElementById('edit-modal').classList.remove('hidden');
 }
+
 function closeEditModal() {
   document.getElementById('edit-modal').classList.add('hidden');
   editingIndex = -1;
 }
+
 function saveEditQuestion() {
   if (editingIndex < 0) return;
   const q = document.getElementById('edit-question').value.trim();
@@ -1386,7 +1520,8 @@ function saveEditQuestion() {
     question: q,
     answers: [a, b, c, d],
     correct: parseInt(document.getElementById('edit-correct').value),
-    time: Math.min(120, Math.max(5, parseInt(document.getElementById('edit-time').value) || 20))
+    time: Math.min(120, Math.max(5, parseInt(document.getElementById('edit-time').value) || 20)),
+    image: editImageBase64 || null
   };
   closeEditModal();
   renderQuestions();
@@ -1555,6 +1690,14 @@ function showQuestion() {
   document.getElementById('game-progress').textContent = `Pregunta ${currentQ + 1}/${questions.length}`;
   document.getElementById('game-timer-badge').textContent = `⏱ ${timeLeft}s`;
   document.getElementById('game-question').textContent = q.question;
+  
+  if (q.image) {
+    document.getElementById('game-image').src = q.image;
+    document.getElementById('game-image-container').classList.remove('hidden');
+  } else {
+    document.getElementById('game-image-container').classList.add('hidden');
+  }
+  
   document.getElementById('game-responses').textContent = '0 respuestas recibidas';
   document.getElementById('timer-fill').style.width = '100%';
 
@@ -1574,7 +1717,8 @@ function showQuestion() {
       question: q.question,
       answers: q.answers,
       time: q.time,
-      total: questions.length
+      total: questions.length,
+      image: q.image || null
     }
   });
 
@@ -1734,7 +1878,7 @@ function exportResults() {
 
 // ======== STUDENT GAMEPLAY ========
 function showStudentQuestion(msg) {
-  const { index, question, answers, time, total } = msg;
+  const { index, question, answers, time, total, image } = msg;
   currentQ = index;
   timeLeft = time;
   currentQuestionStartTime = Date.now();
@@ -1742,6 +1886,14 @@ function showStudentQuestion(msg) {
   document.getElementById('sp-progress').textContent = `Pregunta ${index + 1}/${total}`;
   document.getElementById('sp-score').textContent = `${studentScore} pts`;
   document.getElementById('sp-question').textContent = question;
+  
+  if (image) {
+    document.getElementById('sp-image').src = image;
+    document.getElementById('sp-image-container').classList.remove('hidden');
+  } else {
+    document.getElementById('sp-image-container').classList.add('hidden');
+  }
+
   document.getElementById('sp-feedback').textContent = '';
   document.getElementById('sp-timer-fill').style.width = '100%';
 
