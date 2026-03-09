@@ -697,6 +697,11 @@ input::placeholder,textarea::placeholder{color:rgba(148,163,184,.74)}
         <input type="text" id="settings-anthropic-key" class="w-full rounded-[24px] border border-white/10 bg-slate-950/60 px-5 py-4 text-base text-white outline-none transition placeholder:text-slate-500 focus:border-teal-400/70 focus:ring-4 focus:ring-teal-400/10" placeholder="sk-ant-...">
         <small class="mt-3 block text-sm leading-6 text-slate-400">Consigue tu key en <a href="https://console.anthropic.com" target="_blank" class="font-semibold text-teal-200 underline decoration-teal-400/40 underline-offset-4">console.anthropic.com</a></small>
       </div>
+      <div>
+        <label class="mb-2 block font-mono-ui text-[11px] uppercase tracking-[0.28em] text-slate-400">Tiempo por defecto por pregunta (segundos)</label>
+        <input type="number" id="settings-default-time" min="5" max="120" value="20" class="w-full rounded-[24px] border border-white/10 bg-slate-950/60 px-5 py-4 text-base text-white outline-none transition placeholder:text-slate-500 focus:border-teal-400/70 focus:ring-4 focus:ring-teal-400/10">
+        <small class="mt-3 block text-sm leading-6 text-slate-400">Las nuevas preguntas usarán este tiempo por defecto (entre 5 y 120 segundos).</small>
+      </div>
       <div class="flex flex-col gap-3 sm:flex-row">
         <button class="btn btn-green inline-flex w-full items-center justify-center gap-2 rounded-[24px] bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300 px-6 py-4 font-semibold text-slate-950 shadow-[0_18px_40px_rgba(52,211,153,0.2)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(52,211,153,0.24)] active:scale-[0.98]" onclick="saveUserSettings()">💾 Guardar</button>
         <button class="btn btn-ghost inline-flex w-full items-center justify-center gap-2 rounded-[24px] border border-white/10 bg-white/[0.04] px-6 py-4 font-semibold text-slate-100 transition duration-200 hover:-translate-y-1 hover:bg-white/[0.08] active:scale-[0.98]" onclick="closeSettingsModal()">Cancelar</button>
@@ -806,6 +811,9 @@ async function loadUserSettings() {
         document.getElementById('anthropic-key-stored').classList.remove('hidden');
         saveApiKey('anthropic', data.anthropicApiKey);
       }
+      if (data.defaultTime) {
+        setDefaultTime(data.defaultTime);
+      }
     }
   } catch(e) { console.error('Error cargando configuración:', e); }
 }
@@ -815,6 +823,7 @@ function openSettingsModal() {
   const aKey = document.getElementById('api-key').value;
   document.getElementById('settings-google-key').value = gKey;
   document.getElementById('settings-anthropic-key').value = aKey;
+  document.getElementById('settings-default-time').value = getDefaultTime();
   document.getElementById('settings-modal').classList.remove('hidden');
 }
 
@@ -822,23 +831,40 @@ function closeSettingsModal() {
   document.getElementById('settings-modal').classList.add('hidden');
 }
 
+function getDefaultTime() {
+  const stored = localStorage.getItem('carlaquiz_default_time');
+  return stored ? parseInt(stored) : 20;
+}
+
+function setDefaultTime(t) {
+  const val = Math.min(120, Math.max(5, parseInt(t) || 20));
+  localStorage.setItem('carlaquiz_default_time', val);
+  // Apply to manual question form if visible
+  const mTime = document.getElementById('m-time');
+  if (mTime) mTime.value = val;
+}
+
 async function saveUserSettings() {
-  if (!db || !currentUser) return;
   const gKey = document.getElementById('settings-google-key').value.trim();
   const aKey = document.getElementById('settings-anthropic-key').value.trim();
-  try {
-    await db.collection('users').doc(currentUser.uid).set({
-      googleApiKey: gKey,
-      anthropicApiKey: aKey
-    }, { merge: true });
-    // Sync to the create-quiz inputs and sessionStorage
-    document.getElementById('google-api-key').value = gKey;
-    document.getElementById('api-key').value = aKey;
-    if (gKey) { saveApiKey('google', gKey); document.getElementById('google-key-stored').classList.remove('hidden'); }
-    if (aKey) { saveApiKey('anthropic', aKey); document.getElementById('anthropic-key-stored').classList.remove('hidden'); }
-    closeSettingsModal();
-    showToast('Configuración guardada', 'success');
-  } catch(e) { showToast('Error al guardar: ' + e.message, 'error'); }
+  const defaultTime = Math.min(120, Math.max(5, parseInt(document.getElementById('settings-default-time').value) || 20));
+  setDefaultTime(defaultTime);
+  if (db && currentUser) {
+    try {
+      await db.collection('users').doc(currentUser.uid).set({
+        googleApiKey: gKey,
+        anthropicApiKey: aKey,
+        defaultTime
+      }, { merge: true });
+      // Sync to the create-quiz inputs and sessionStorage
+      document.getElementById('google-api-key').value = gKey;
+      document.getElementById('api-key').value = aKey;
+      if (gKey) { saveApiKey('google', gKey); document.getElementById('google-key-stored').classList.remove('hidden'); }
+      if (aKey) { saveApiKey('anthropic', aKey); document.getElementById('anthropic-key-stored').classList.remove('hidden'); }
+    } catch(e) { showToast('Error al guardar: ' + e.message, 'error'); return; }
+  }
+  closeSettingsModal();
+  showToast('Configuración guardada', 'success');
 }
 
 // ======== SAVE / LOAD QUIZZES ========
@@ -1331,7 +1357,7 @@ async function generateWithAI() {
           question: q.question.trim(),
           answers: q.answers.map(a => String(a).trim()),
           correct: q.correct,
-          time: Math.min(120, Math.max(5, q.time || 20)),
+          time: Math.min(120, Math.max(5, q.time || getDefaultTime())),
           image: imageUrl
         });
         validCount++;
@@ -1429,7 +1455,7 @@ async function addManualQuestion() {
   const b = document.getElementById('m-b').value.trim();
   const c = document.getElementById('m-c').value.trim();
   const d = document.getElementById('m-d').value.trim();
-  const t = parseInt(document.getElementById('m-time').value) || 20;
+  const t = parseInt(document.getElementById('m-time').value) || getDefaultTime();
 
   if (!q || !a || !b || !c || !d) { showToast('Rellena todos los campos', 'error'); return; }
 
@@ -1445,6 +1471,7 @@ async function addManualQuestion() {
   // Reset form
   ['m-question','m-a','m-b','m-c','m-d'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('m-correct').value = '0';
+  document.getElementById('m-time').value = getDefaultTime();
   removeManualImage();
   
   document.getElementById('m-question').focus();
@@ -1550,7 +1577,7 @@ function saveEditQuestion() {
     question: q,
     answers: [a, b, c, d],
     correct: parseInt(document.getElementById('edit-correct').value),
-    time: Math.min(120, Math.max(5, parseInt(document.getElementById('edit-time').value) || 20)),
+    time: Math.min(120, Math.max(5, parseInt(document.getElementById('edit-time').value) || getDefaultTime())),
     image: editImageBase64 || null
   };
   closeEditModal();
@@ -2053,6 +2080,7 @@ document.addEventListener('keydown', (e) => {
 // ======== INIT ========
 initApiKeys();
 initFirebase();
+document.getElementById('m-time').value = getDefaultTime();
 </script>
 
 </body>
