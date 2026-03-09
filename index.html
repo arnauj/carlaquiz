@@ -1357,7 +1357,7 @@ async function generateWithAI() {
           question: q.question.trim(),
           answers: q.answers.map(a => String(a).trim()),
           correct: q.correct,
-          time: Math.min(120, Math.max(5, q.time || getDefaultTime())),
+          time: getDefaultTime(),
           image: imageUrl
         });
         validCount++;
