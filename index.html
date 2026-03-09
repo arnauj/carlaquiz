@@ -293,6 +293,9 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
         <h2>📝 Crear Cuestionario</h2>
         <button class="btn btn-ghost btn-sm" onclick="showScreen('screen-home')">← Volver</button>
       </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <input type="text" id="quiz-name-input" placeholder="Nombre del cuestionario (requerido para guardar)..." maxlength="80" style="font-weight:600">
+      </div>
 
   <div class="tabs">
     <div class="tab active" onclick="switchTab('tab-ai',this)">🤖 Generar con IA</div>
@@ -471,9 +474,8 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
     <h3>Preguntas añadidas <span class="badge badge-cyan" id="q-count">0</span></h3>
     <button class="btn btn-danger btn-sm" onclick="clearQuestions()" id="btn-clear" style="display:none">🗑️ Borrar todo</button>
   </div>
-  <div id="questions-list">
-    <p class="text-muted text-center" id="no-questions">Aún no hay preguntas. ¡Genera con IA o añade manualmente!</p>
-  </div>
+  <p class="text-muted text-center" id="no-questions">Aún no hay preguntas. ¡Genera con IA o añade manualmente!</p>
+  <div id="questions-list"></div>
 
   <div class="divider"></div>
   <div class="option-row" id="opt-ranking-row" style="display:none">
@@ -490,7 +492,7 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
     <button class="btn btn-orange" onclick="startLobby()" id="btn-start-game" style="flex:1;display:none">
       🎮 Iniciar partida
     </button>
-    <button class="btn btn-ghost" onclick="openSaveQuizModal()" id="btn-save-quiz" style="display:none">
+    <button class="btn btn-ghost" onclick="saveCurrentQuiz()" id="btn-save-quiz" style="display:none">
       💾 Guardar
     </button>
   </div>
@@ -717,20 +719,6 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
   </div>
 </div>
 
-<!-- ========== MODAL: GUARDAR CUESTIONARIO ========== -->
-<div id="save-quiz-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeSaveQuizModal()">
-  <div class="modal-content" style="max-width:420px">
-    <h3 style="margin-bottom:16px">💾 Guardar cuestionario</h3>
-    <div class="form-group">
-      <label>Nombre del cuestionario</label>
-      <input type="text" id="save-quiz-name" placeholder="Ej: Tema 3 – Revolución Francesa" maxlength="80">
-    </div>
-    <div style="display:flex;gap:10px;margin-top:8px">
-      <button class="btn btn-green" onclick="confirmSaveQuiz()" style="flex:1">💾 Guardar</button>
-      <button class="btn btn-ghost" onclick="closeSaveQuizModal()">Cancelar</button>
-    </div>
-  </div>
-</div>
 
 <!-- ========== MODAL: CONFIGURACIÓN ========== -->
 <div id="settings-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeSettingsModal()">
@@ -791,7 +779,9 @@ const FIREBASE_CONFIG = {
 
 
 let db = null, auth = null, currentUser = null;
-let myQuizzesCache = {};  // quizId → questions[]
+let myQuizzesCache = {};  // quizId → { name, questions }
+let currentQuizId = null;   // ID del cuestionario cargado desde DB (para poder actualizarlo)
+let currentQuizName = '';   // Nombre del cuestionario cargado
 
 function initFirebase() {
   if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === 'TU_API_KEY') return;
@@ -895,29 +885,27 @@ async function saveUserSettings() {
 }
 
 // ======== SAVE / LOAD QUIZZES ========
-function openSaveQuizModal() {
+async function saveCurrentQuiz() {
   if (!currentUser) { showToast('Inicia sesión para guardar', 'error'); return; }
   if (!questions.length) { showToast('No hay preguntas para guardar', 'error'); return; }
-  document.getElementById('save-quiz-modal').classList.remove('hidden');
-  setTimeout(() => document.getElementById('save-quiz-name').focus(), 100);
-}
-function closeSaveQuizModal() {
-  document.getElementById('save-quiz-modal').classList.add('hidden');
-}
-
-async function confirmSaveQuiz() {
-  const name = document.getElementById('save-quiz-name').value.trim();
-  if (!name) { showToast('Escribe un nombre', 'error'); return; }
-  if (!db || !currentUser) return;
+  const name = document.getElementById('quiz-name-input').value.trim();
+  if (!name) { showToast('Escribe un nombre para el cuestionario', 'error'); document.getElementById('quiz-name-input').focus(); return; }
+  if (!db) return;
   try {
-    await db.collection('quizzes').doc(currentUser.uid).collection('list').add({
-      name,
-      questions,
-      savedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    closeSaveQuizModal();
-    document.getElementById('save-quiz-name').value = '';
-    showToast(`"${name}" guardado`, 'success');
+    if (currentQuizId) {
+      await db.collection('quizzes').doc(currentUser.uid).collection('list').doc(currentQuizId).update({
+        name, questions, savedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      currentQuizName = name;
+      showToast(`"${name}" actualizado`, 'success');
+    } else {
+      const docRef = await db.collection('quizzes').doc(currentUser.uid).collection('list').add({
+        name, questions, savedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      currentQuizId = docRef.id;
+      currentQuizName = name;
+      showToast(`"${name}" guardado`, 'success');
+    }
   } catch(e) { showToast('Error al guardar: ' + e.message, 'error'); }
 }
 
@@ -935,7 +923,7 @@ async function loadMyQuizzes() {
       list.innerHTML = '<p class="text-muted text-center" style="padding:30px">No tienes cuestionarios guardados aún</p>';
       return;
     }
-    snap.docs.forEach(doc => { myQuizzesCache[doc.id] = doc.data().questions; });
+    snap.docs.forEach(doc => { myQuizzesCache[doc.id] = { name: doc.data().name, questions: doc.data().questions }; });
     list.innerHTML = snap.docs.map(doc => {
       const d = doc.data();
       const date = d.savedAt ? new Date(d.savedAt.seconds * 1000).toLocaleDateString('es') : '';
@@ -954,11 +942,15 @@ async function loadMyQuizzes() {
 }
 
 function selectSavedQuiz(quizId) {
-  questions = myQuizzesCache[quizId] || [];
+  const cached = myQuizzesCache[quizId] || { name: '', questions: [] };
+  questions = [...(cached.questions || [])];
+  currentQuizId = quizId;
+  currentQuizName = cached.name || '';
+  document.getElementById('quiz-name-input').value = currentQuizName;
   renderQuestions();
   closeMyQuizzes();
   showScreen('screen-create');
-  showToast(`Cuestionario cargado (${questions.length} preguntas)`, 'success');
+  showToast(`"${currentQuizName}" cargado (${questions.length} preguntas)`, 'success');
 }
 
 async function deleteSavedQuiz(quizId, btn) {
@@ -966,6 +958,7 @@ async function deleteSavedQuiz(quizId, btn) {
   try {
     await db.collection('quizzes').doc(currentUser.uid).collection('list').doc(quizId).delete();
     delete myQuizzesCache[quizId];
+    if (currentQuizId === quizId) { currentQuizId = null; currentQuizName = ''; }
     btn.closest('.quiz-item').remove();
     showToast('Eliminado', 'info');
   } catch(e) { showToast('Error al eliminar', 'error'); }
@@ -1431,8 +1424,8 @@ function renderQuestions() {
   document.getElementById('opt-ranking-row').style.display = questions.length >= 1 ? '' : 'none';
   updateSaveButtonVisibility();
 
-  if (!questions.length) { noQ.classList.remove('hidden'); list.innerHTML = ''; return; }
-  noQ.classList.add('hidden');
+  if (!questions.length) { noQ.style.display = ''; list.innerHTML = ''; return; }
+  noQ.style.display = 'none';
 
   list.innerHTML = questions.map((q, i) => `
     <div class="q-item">
@@ -1454,7 +1447,7 @@ function renderQuestions() {
 }
 
 function removeQuestion(i) { questions.splice(i, 1); renderQuestions(); }
-function clearQuestions() { if(confirm('¿Borrar todas las preguntas?')){questions=[];renderQuestions();} }
+function clearQuestions() { if(confirm('¿Borrar todas las preguntas?')){questions=[];currentQuizId=null;currentQuizName='';document.getElementById('quiz-name-input').value='';renderQuestions();} }
 function moveQuestion(i, dir) {
   const j = i + dir;
   if (j < 0 || j >= questions.length) return;
@@ -2003,14 +1996,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !document.getElementById('edit-modal').classList.contains('hidden')) {
     closeEditModal();
   }
-  if (e.key === 'Escape' && !document.getElementById('save-quiz-modal').classList.contains('hidden')) {
-    closeSaveQuizModal();
-  }
   if (e.key === 'Escape' && !document.getElementById('my-quizzes-modal').classList.contains('hidden')) {
     closeMyQuizzes();
-  }
-  if (e.key === 'Enter' && !document.getElementById('save-quiz-modal').classList.contains('hidden')) {
-    confirmSaveQuiz();
   }
   // Enter in join fields
   if (e.key === 'Enter' && document.getElementById('screen-join').classList.contains('active')) {
