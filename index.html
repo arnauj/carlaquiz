@@ -1188,7 +1188,7 @@ async function callGeminiWithModel(apiKey, prompt, modelName) {
 }
 
 async function callGemini(apiKey, prompt) {
-  const models = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+  const models = ['gemini-2.5-flash', 'gemini-3.1-flash-lite-preview'];
   let lastError;
   for (const model of models) {
     try {
