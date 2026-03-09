@@ -108,7 +108,7 @@ startLobby() → startGame() → showQuestion() → timer → revealAnswer()
 ## Proveedores de IA
 
 ### Google Gemini
-- Modelos: `gemini-2.5-flash` (con fallback a `gemini-2.0-flash`)
+- Modelos: `gemini-3.1-pro` (con fallback a `gemini-3.1-flash-lite`)
 - Entrada: texto libre o texto extraído del PDF (via pdf.js)
 - Configura tu key en [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 

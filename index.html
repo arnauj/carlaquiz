@@ -500,7 +500,10 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
 
   <div id="screen-lobby" class="screen">
     <div class="card text-center">
-      <h2 class="mb-1">Sala de espera</h2>
+      <div class="flex-center mb-2" style="justify-content:space-between">
+        <h2 class="mb-0">Sala de espera</h2>
+        <button class="btn btn-ghost btn-sm" onclick="exitToEdit()">✕ Salir</button>
+      </div>
       <p class="text-muted mb-2">Los alumnos pueden escanear el QR o introducir el PIN</p>
       <div class="pin-display" id="lobby-pin"></div>
       <div id="qr-container"></div>
@@ -520,6 +523,7 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
     <div class="card">
       <div class="flex-center mb-1" style="justify-content:space-between">
         <span class="badge badge-cyan" id="game-progress">Pregunta 1/10</span>
+        <button class="btn btn-ghost btn-sm" onclick="exitToEdit()" style="padding:4px 8px;font-size:.7rem">✕ Salir</button>
         <span class="badge badge-pink" id="game-timer-badge">⏱ 20s</span>
       </div>
       <div class="timer-bar"><div class="fill" id="timer-fill" style="width:100%"></div></div>
@@ -535,7 +539,10 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
 
   <div id="screen-reveal" class="screen">
     <div class="card text-center">
-      <h2 id="reveal-question" style="margin-bottom:16px"></h2>
+      <div class="flex-center mb-2" style="justify-content:space-between">
+        <h2 id="reveal-question" style="margin-bottom:0;font-size:1.2rem;text-align:left"></h2>
+        <button class="btn btn-ghost btn-sm" onclick="exitToEdit()">✕ Salir</button>
+      </div>
       <div class="answers-grid" id="reveal-answers"></div>
       <div class="divider"></div>
       <div id="reveal-stats"></div>
@@ -547,7 +554,10 @@ background:rgba(46,213,115,.1);color:var(--green);margin-top:6px;font-family:'Sp
 
   <div id="screen-scoreboard" class="screen">
     <div class="card text-center">
-      <div class="emoji-big">🏆</div>
+      <div class="flex-center mb-2" style="justify-content:space-between">
+        <div class="emoji-big" style="margin-bottom:0">🏆</div>
+        <button class="btn btn-ghost btn-sm" onclick="exitToEdit()">✕ Salir</button>
+      </div>
       <h2 class="mb-2">Clasificación</h2>
       <div id="scoreboard-list"></div>
       <div class="divider"></div>
@@ -1143,7 +1153,7 @@ async function callGeminiWithModel(apiKey, prompt, modelName) {
 }
 
 async function callGemini(apiKey, prompt) {
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  const models = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
   let lastError;
   for (const model of models) {
     try {
@@ -1177,7 +1187,7 @@ async function callClaude(apiKey, prompt, pdfBase64) {
       'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 8000,
       messages: [{ role: 'user', content: contentParts }]
     })
@@ -1814,6 +1824,16 @@ function launchConfetti() {
 
 // ======== UTILS ========
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function exitToEdit() {
+  if (!confirm('¿Detener partida y volver a la edición?')) return;
+  clearInterval(timerInterval);
+  stopGameListeners();
+  if (isTeacher && gamePin && db) {
+    db.collection('games').doc(gamePin).update({ state: 'gameover' }).catch(()=>{});
+  }
+  showScreen('screen-create');
+}
 
 function resetAll() {
   questions = [];
