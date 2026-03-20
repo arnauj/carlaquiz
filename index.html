@@ -435,9 +435,13 @@ input::placeholder,textarea::placeholder{color:rgba(148,163,184,.74)}
 
       <div class="my-8 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"></div>
 
+      <input type="file" id="import-quiz-input" accept=".json" class="hidden" onchange="handleImportQuiz(this)">
       <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 class="font-display text-2xl font-semibold tracking-tight text-white">Preguntas añadidas <span class="ml-2 inline-flex items-center rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-200" id="q-count">0</span></h3>
-        <button class="btn btn-danger inline-flex items-center gap-2 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-2.5 text-sm font-semibold text-rose-200 transition duration-200 hover:bg-rose-400/15 active:scale-[0.98]" onclick="clearQuestions()" id="btn-clear" style="display:none">🗑️ Borrar todo</button>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-ghost inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-100 transition duration-200 hover:bg-white/[0.08] active:scale-[0.98]" onclick="importQuiz()">📥 Importar JSON</button>
+          <button class="btn btn-danger inline-flex items-center gap-2 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-2.5 text-sm font-semibold text-rose-200 transition duration-200 hover:bg-rose-400/15 active:scale-[0.98]" onclick="clearQuestions()" id="btn-clear" style="display:none">🗑️ Borrar todo</button>
+        </div>
       </div>
       <p class="rounded-[24px] border border-dashed border-white/10 bg-slate-950/40 px-6 py-8 text-center text-sm text-slate-400" id="no-questions">Aún no hay preguntas. Genera con IA o añade manualmente.</p>
       <div id="questions-list" class="space-y-3"></div>
@@ -458,6 +462,8 @@ input::placeholder,textarea::placeholder{color:rgba(148,163,184,.74)}
       <div class="mt-4 flex flex-wrap gap-3">
         <button class="btn btn-orange inline-flex items-center justify-center gap-2 rounded-[24px] bg-gradient-to-r from-orange-300 to-amber-300 px-6 py-4 font-semibold text-slate-950 shadow-[0_18px_40px_rgba(251,146,60,0.22)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(251,146,60,0.26)] active:scale-[0.98] sm:flex-1" onclick="startLobby()" id="btn-start-game" style="display:none">🎮 Iniciar partida</button>
         <button class="btn btn-ghost inline-flex items-center justify-center gap-2 rounded-[24px] border border-white/10 bg-white/[0.04] px-6 py-4 font-semibold text-slate-100 transition duration-200 hover:-translate-y-1 hover:bg-white/[0.08] active:scale-[0.98]" onclick="saveCurrentQuiz()" id="btn-save-quiz" style="display:none">💾 Guardar</button>
+        <button class="btn btn-ghost inline-flex items-center justify-center gap-2 rounded-[24px] border border-white/10 bg-white/[0.04] px-6 py-4 font-semibold text-slate-100 transition duration-200 hover:-translate-y-1 hover:bg-white/[0.08] active:scale-[0.98]" onclick="exportQuiz()" id="btn-export-quiz" style="display:none">📤 Exportar JSON</button>
+        <button class="btn btn-ghost inline-flex items-center justify-center gap-2 rounded-[24px] border border-teal-400/20 bg-teal-400/10 px-6 py-4 font-semibold text-teal-100 transition duration-200 hover:-translate-y-1 hover:bg-teal-400/15 active:scale-[0.98]" onclick="exportGift()" id="btn-export-gift" style="display:none">🎓 Exportar GIFT (Moodle)</button>
       </div>
     </div>
   </div>
@@ -1170,6 +1176,17 @@ function selectProvider(provider) {
   document.getElementById('provider-anthropic').classList.toggle('hidden', provider !== 'anthropic');
 }
 
+// ======== SHUFFLE HELPER ========
+function shuffleAnswers(q) {
+  const correctText = q.answers[q.correct];
+  const arr = [...q.answers];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return { ...q, answers: arr, correct: arr.indexOf(correctText) };
+}
+
 // ======== AI GENERATION ========
 function buildPrompt(topic, count, level, lang, pdfText, withImages) {
   let contextBlock = '';
@@ -1197,6 +1214,7 @@ Responde SOLO con un JSON array (sin markdown, sin backticks, sin texto extra). 
 {"question":"texto","answers":["opA","opB","opC","opD"],"correct":0,"time":20${withImages ? ',"image_desc":"descripción en inglés (opcional)"' : ''}}
 
 donde "correct" es el índice (0-3) de la respuesta correcta.
+IMPORTANTE: Distribuye los valores de "correct" de forma proporcional y variada entre 0, 1, 2 y 3 a lo largo de todas las preguntas. No concentres las respuestas correctas siempre en el mismo índice.
 Las preguntas deben ser variadas, claras y adecuadas al nivel. Las opciones incorrectas deben ser plausibles pero claramente erróneas.
 Asegúrate de que las 4 opciones de cada pregunta sean distintas entre sí.`;
 }
@@ -1353,13 +1371,15 @@ async function generateWithAI() {
            const seed = Math.floor(Math.random() * 1000);
            imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(q.image_desc)}?width=800&height=600&nologo=true&seed=${seed}`;
         }
-        questions.push({
+        const normalized = {
           question: q.question.trim(),
           answers: q.answers.map(a => String(a).trim()),
           correct: q.correct,
           time: getDefaultTime(),
           image: imageUrl
-        });
+        };
+        const shuffled = shuffleAnswers(normalized);
+        questions.push(shuffled);
         validCount++;
       }
     });
@@ -1486,6 +1506,8 @@ function renderQuestions() {
   document.getElementById('btn-clear').style.display = questions.length ? '' : 'none';
   document.getElementById('btn-start-game').style.display = questions.length >= 1 ? '' : 'none';
   document.getElementById('opt-ranking-row').style.display = questions.length >= 1 ? '' : 'none';
+  document.getElementById('btn-export-quiz').style.display = questions.length ? '' : 'none';
+  document.getElementById('btn-export-gift').style.display = questions.length ? '' : 'none';
   updateSaveButtonVisibility();
 
   if (!questions.length) { noQ.style.display = ''; list.innerHTML = ''; return; }
@@ -1939,6 +1961,71 @@ function exportResults() {
   a.click();
   URL.revokeObjectURL(url);
   showToast('Resultados exportados', 'success');
+}
+
+// ======== EXPORT/IMPORT QUIZ ========
+function exportQuiz() {
+  if (!questions.length) { showToast('No hay preguntas para exportar', 'error'); return; }
+  const name = document.getElementById('quiz-name-input').value.trim() || 'cuestionario';
+  const data = { name, questions };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${name.replace(/\s+/g, '-')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Cuestionario exportado como JSON', 'success');
+}
+
+function importQuiz() {
+  document.getElementById('import-quiz-input').click();
+}
+
+function handleImportQuiz(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const qs = Array.isArray(data) ? data : (data.questions || []);
+      const name = (!Array.isArray(data) && data.name) ? data.name : '';
+      const valid = qs.filter(q => q.question && Array.isArray(q.answers) && q.answers.length === 4 && typeof q.correct === 'number');
+      if (!valid.length) throw new Error('No se encontraron preguntas válidas');
+      questions = [...questions, ...valid];
+      const nameInput = document.getElementById('quiz-name-input');
+      if (name && !nameInput.value.trim()) nameInput.value = name;
+      renderQuestions();
+      showToast(`${valid.length} preguntas importadas`, 'success');
+    } catch(err) {
+      showToast('Error al importar: ' + err.message, 'error');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function exportGift() {
+  if (!questions.length) { showToast('No hay preguntas para exportar', 'error'); return; }
+  const name = document.getElementById('quiz-name-input').value.trim() || 'cuestionario';
+  const escGift = s => s.replace(/[{}=~#:]/g, '\\$&');
+  let gift = `// GIFT format — ${name}\n// Generado por Carla Quiz\n\n`;
+  questions.forEach((q, i) => {
+    gift += `::Pregunta ${i + 1}::${escGift(q.question)}{\n`;
+    q.answers.forEach((a, j) => {
+      gift += `  ${j === q.correct ? '=' : '~'}${escGift(a)}\n`;
+    });
+    gift += `}\n\n`;
+  });
+  const blob = new Blob([gift], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${name.replace(/\s+/g, '-')}.gift.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Cuestionario exportado en formato GIFT (Moodle)', 'success');
 }
 
 // ======== STUDENT GAMEPLAY ========
