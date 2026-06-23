@@ -134,6 +134,10 @@ input::placeholder,textarea::placeholder{color:rgba(148,163,184,.74)}
 @keyframes fadeOut{to{opacity:0;transform:translate3d(0,-8px,0)}}
 .confetti-piece{position:absolute;top:-20px;animation:confettiFall 3s ease-in forwards}
 @keyframes confettiFall{to{top:110vh;transform:translateX(110px) rotate(720deg)}}
+/* Modal scrolling so content never escapes the viewport on mobile */
+.modal-overlay{overflow-y:auto;-webkit-overflow-scrolling:touch}
+.modal-content{max-height:calc(100dvh - 2rem);overflow-y:auto;-webkit-overflow-scrolling:touch}
+body.modal-open{overflow:hidden}
 .hidden{display:none!important}
 </style>
 </head>
@@ -543,6 +547,7 @@ input::placeholder,textarea::placeholder{color:rgba(148,163,184,.74)}
       <div class="grid gap-4 md:grid-cols-2" id="reveal-answers"></div>
       <div class="my-8 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"></div>
       <div id="reveal-stats"></div>
+      <div id="reveal-players" class="mt-6"></div>
       <button class="btn btn-primary mt-8 inline-flex items-center justify-center gap-2 rounded-[24px] bg-gradient-to-r from-teal-300 via-cyan-300 to-orange-300 px-6 py-4 font-semibold text-slate-950 shadow-[0_18px_40px_rgba(45,212,191,0.22)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(45,212,191,0.28)] active:scale-[0.98]" onclick="nextQuestion()" id="btn-next">Siguiente pregunta ➡️</button>
     </div>
   </div>
@@ -599,7 +604,7 @@ input::placeholder,textarea::placeholder{color:rgba(148,163,184,.74)}
     <div class="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.34)] backdrop-blur-xl sm:p-8 lg:p-10">
       <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
         <span class="inline-flex items-center rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-200" id="sp-progress"></span>
-        <span class="inline-flex items-center rounded-full border border-orange-300/20 bg-orange-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-200" id="sp-score">0 pts</span>
+        <span class="inline-flex items-center rounded-full border border-orange-300/20 bg-orange-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-200" id="sp-score">0 aciertos</span>
       </div>
       <div class="h-3 w-full overflow-hidden rounded-full bg-white/10"><div class="h-full rounded-full bg-gradient-to-r from-emerald-300 via-amber-300 to-rose-400 transition-[width] duration-500 ease-linear" id="sp-timer-fill" style="width:100%"></div></div>
       <div id="sp-image-container" class="hidden mb-5 text-center">
@@ -618,7 +623,8 @@ input::placeholder,textarea::placeholder{color:rgba(148,163,184,.74)}
       <p class="mt-3 text-sm leading-6 text-slate-400" id="sr-subtitle"></p>
       <div class="my-8 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"></div>
       <div class="font-mono-ui text-5xl font-bold tracking-tight text-teal-200" id="sr-score"></div>
-      <p class="mt-2 text-sm uppercase tracking-[0.22em] text-slate-400">Puntos totales</p>
+      <p class="mt-2 text-sm uppercase tracking-[0.22em] text-slate-400" id="sr-score-label">Aciertos totales</p>
+      <div id="sr-ranking" class="hidden mt-8 text-left"></div>
       <button class="btn btn-primary mt-8 inline-flex items-center justify-center gap-2 rounded-[24px] bg-gradient-to-r from-teal-300 via-cyan-300 to-orange-300 px-6 py-4 font-semibold text-slate-950 shadow-[0_18px_40px_rgba(45,212,191,0.22)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(45,212,191,0.28)] active:scale-[0.98]" onclick="showScreen('screen-home')">🏠 Volver</button>
     </div>
   </div>
@@ -707,6 +713,18 @@ input::placeholder,textarea::placeholder{color:rgba(148,163,184,.74)}
         <label class="mb-2 block font-mono-ui text-[11px] uppercase tracking-[0.28em] text-slate-400">Tiempo por defecto por pregunta (segundos)</label>
         <input type="number" id="settings-default-time" min="5" max="120" value="20" class="w-full rounded-[24px] border border-white/10 bg-slate-950/60 px-5 py-4 text-base text-white outline-none transition placeholder:text-slate-500 focus:border-teal-400/70 focus:ring-4 focus:ring-teal-400/10">
         <small class="mt-3 block text-sm leading-6 text-slate-400">Las nuevas preguntas usarán este tiempo por defecto (entre 5 y 120 segundos).</small>
+      </div>
+      <div class="rounded-[24px] border border-white/10 bg-slate-950/55 px-5 py-4">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <label for="settings-show-ranking" class="block text-sm font-semibold text-white">Mostrar el ranking a todos al acabar la partida</label>
+            <div class="mt-1 text-sm text-slate-400">Si se activa, los alumnos verán la clasificación final completa. Desactivado por defecto.</div>
+          </div>
+          <label class="toggle relative h-6 w-11 shrink-0">
+            <input type="checkbox" id="settings-show-ranking" class="sr-only">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
       </div>
       <div class="flex flex-col gap-3 sm:flex-row">
         <button class="btn btn-green inline-flex w-full items-center justify-center gap-2 rounded-[24px] bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300 px-6 py-4 font-semibold text-slate-950 shadow-[0_18px_40px_rgba(52,211,153,0.2)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(52,211,153,0.24)] active:scale-[0.98]" onclick="saveUserSettings()">💾 Guardar</button>
@@ -820,6 +838,9 @@ async function loadUserSettings() {
       if (data.defaultTime) {
         setDefaultTime(data.defaultTime);
       }
+      if (typeof data.showFinalRanking === 'boolean') {
+        setShowFinalRanking(data.showFinalRanking);
+      }
     }
   } catch(e) { console.error('Error cargando configuración:', e); }
 }
@@ -830,11 +851,14 @@ function openSettingsModal() {
   document.getElementById('settings-google-key').value = gKey;
   document.getElementById('settings-anthropic-key').value = aKey;
   document.getElementById('settings-default-time').value = getDefaultTime();
+  document.getElementById('settings-show-ranking').checked = showFinalRankingToStudents;
   document.getElementById('settings-modal').classList.remove('hidden');
+  syncModalScrollLock();
 }
 
 function closeSettingsModal() {
   document.getElementById('settings-modal').classList.add('hidden');
+  syncModalScrollLock();
 }
 
 function getDefaultTime() {
@@ -850,17 +874,25 @@ function setDefaultTime(t) {
   if (mTime) mTime.value = val;
 }
 
+function setShowFinalRanking(on) {
+  showFinalRankingToStudents = !!on;
+  localStorage.setItem('carlaquiz_show_final_ranking', showFinalRankingToStudents ? '1' : '0');
+}
+
 async function saveUserSettings() {
   const gKey = document.getElementById('settings-google-key').value.trim();
   const aKey = document.getElementById('settings-anthropic-key').value.trim();
   const defaultTime = Math.min(120, Math.max(5, parseInt(document.getElementById('settings-default-time').value) || 20));
   setDefaultTime(defaultTime);
+  const showFinalRanking = document.getElementById('settings-show-ranking').checked;
+  setShowFinalRanking(showFinalRanking);
   if (db && currentUser) {
     try {
       await db.collection('users').doc(currentUser.uid).set({
         googleApiKey: gKey,
         anthropicApiKey: aKey,
-        defaultTime
+        defaultTime,
+        showFinalRanking
       }, { merge: true });
       // Sync to the create-quiz inputs and sessionStorage
       document.getElementById('google-api-key').value = gKey;
@@ -902,6 +934,7 @@ async function loadMyQuizzes() {
   if (!currentUser) { showToast('Inicia sesión primero', 'error'); return; }
   if (!db) { showToast('Firebase no configurado', 'error'); return; }
   document.getElementById('my-quizzes-modal').classList.remove('hidden');
+  syncModalScrollLock();
   const list = document.getElementById('my-quizzes-list');
   list.innerHTML = '<div class="spinner"></div>';
   try {
@@ -955,6 +988,7 @@ async function deleteSavedQuiz(quizId, btn) {
 
 function closeMyQuizzes() {
   document.getElementById('my-quizzes-modal').classList.add('hidden');
+  syncModalScrollLock();
 }
 
 // ======== STATE ========
@@ -971,6 +1005,9 @@ let currentQuestionStartTime = 0;
 let editingIndex = -1;
 let channel = null;
 let showRankingBetweenQuestions = true;
+let showFinalRankingToStudents = localStorage.getItem('carlaquiz_show_final_ranking') === '1';
+let studentCorrect = 0;
+let studentLastAnswer = null;
 let gameListeners = [];
 let processedAnswers = new Set();
 const toastVariants = {
@@ -1029,7 +1066,10 @@ function getScoreRowMarkup(name, data, index) {
       <div class="truncate text-base font-semibold text-white">${esc(name)}</div>
       <div class="mt-1 font-mono-ui text-[11px] uppercase tracking-[0.18em] text-slate-500">Jugador</div>
     </div>
-    <div class="font-mono-ui text-sm font-semibold text-teal-200">${data.score} pts</div>
+    <div class="text-right">
+      <div class="font-mono-ui text-sm font-semibold text-teal-200">${data.correct || 0} ${(data.correct || 0) === 1 ? 'acierto' : 'aciertos'}</div>
+      <div class="mt-1 font-mono-ui text-[11px] uppercase tracking-[0.18em] text-slate-500">de ${questions.length}</div>
+    </div>
   </div>`;
 }
 
@@ -1041,6 +1081,12 @@ function stopGameListeners() {
 function initChannel(pin) {
   stopGameListeners();
   if (channel) { channel.close(); channel = null; }
+}
+
+// ======== MODAL SCROLL LOCK (prevents mobile background scroll / off-screen modals) ========
+function syncModalScrollLock() {
+  const anyOpen = !!document.querySelector('.modal-overlay:not(.hidden)');
+  document.body.classList.toggle('modal-open', anyOpen);
 }
 
 // ======== TOAST NOTIFICATIONS ========
@@ -1580,11 +1626,13 @@ function openEditModal(i) {
   }
   
   document.getElementById('edit-modal').classList.remove('hidden');
+  syncModalScrollLock();
 }
 
 function closeEditModal() {
   document.getElementById('edit-modal').classList.add('hidden');
   editingIndex = -1;
+  syncModalScrollLock();
 }
 
 function saveEditQuestion() {
@@ -1647,7 +1695,7 @@ function startLobby() {
         if (change.type === 'added') {
           const name = change.doc.data().name;
           if (!players[name]) {
-            players[name] = { score: 0, answers: [], streak: 0 };
+            players[name] = { score: 0, correct: 0, answers: [], streak: 0 };
             renderPlayers();
             showToast(`${name} se ha unido`, 'info');
           }
@@ -1693,6 +1741,8 @@ async function joinGame() {
   gamePin = pin;
   studentName = name;
   studentScore = 0;
+  studentCorrect = 0;
+  studentLastAnswer = null;
   stopGameListeners();
 
   // Verificar que la partida existe
@@ -1733,7 +1783,7 @@ async function joinGame() {
     } else if (data.state === 'reveal') {
       showStudentReveal(data.revealData);
     } else if (data.state === 'gameover') {
-      showStudentFinal();
+      showStudentFinal(data);
     }
   });
   gameListeners.push(unsubGame);
@@ -1821,6 +1871,7 @@ function handleStudentAnswer(name, answerIndex, timeSpent) {
   if (answerIndex === q.correct) {
     const bonus = Math.max(0, Math.round((1 - timeSpent / q.time) * 500 + 500));
     players[name].score += bonus;
+    players[name].correct = (players[name].correct || 0) + 1;
     players[name].streak = (players[name].streak || 0) + 1;
     // Streak bonus
     if (players[name].streak >= 3) {
@@ -1835,7 +1886,11 @@ function handleStudentAnswer(name, answerIndex, timeSpent) {
 
   if (answered >= Object.keys(players).length) {
     clearInterval(timerInterval);
-    setTimeout(revealAnswer, 500);
+    timeLeft = 0;
+    document.getElementById('game-timer-badge').textContent = '⏱ 0s';
+    document.getElementById('timer-fill').style.width = '0%';
+    document.getElementById('game-responses').textContent = '¡Todos han respondido! Mostrando resultados...';
+    setTimeout(revealAnswer, 600);
   }
 }
 
@@ -1877,6 +1932,8 @@ function revealAnswer() {
     </div>
   `;
 
+  renderRevealPlayers(q);
+
   const isLast = currentQ >= questions.length - 1;
   document.getElementById('btn-next').textContent = isLast ? '🏆 Ver resultados finales' : 'Siguiente pregunta ➡️';
 
@@ -1884,11 +1941,40 @@ function revealAnswer() {
     state: 'reveal',
     revealData: {
       correct: q.correct,
-      scores: Object.fromEntries(Object.entries(players).map(([n, p]) => [n, p.score]))
+      scores: Object.fromEntries(Object.entries(players).map(([n, p]) => [n, p.score])),
+      corrects: Object.fromEntries(Object.entries(players).map(([n, p]) => [n, p.correct || 0])),
+      totalQuestions: questions.length
     }
   });
 
   showScreen('screen-reveal');
+}
+
+function renderRevealPlayers(q) {
+  const box = document.getElementById('reveal-players');
+  if (!box) return;
+  const names = Object.keys(players);
+  if (!names.length) { box.innerHTML = ''; return; }
+
+  const right = [], wrong = [];
+  names.forEach(name => {
+    if (players[name].answers[currentQ] === q.correct) right.push(name);
+    else wrong.push(name); // incluye fallos y quien no respondió
+  });
+
+  const chip = (name, ok) => `<span class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold ${ok ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100' : 'border-rose-400/30 bg-rose-400/10 text-rose-100'}">${ok ? '✅' : '❌'} ${esc(name)}</span>`;
+
+  box.innerHTML = `
+    <div class="grid gap-4 md:grid-cols-2 text-left">
+      <div class="rounded-[24px] border border-emerald-400/20 bg-emerald-400/[0.06] p-4">
+        <div class="mb-3 flex items-center gap-2 font-semibold text-emerald-200">✅ Acertaron <span class="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-xs">${right.length}</span></div>
+        <div class="flex flex-wrap gap-2">${right.length ? right.map(n => chip(n, true)).join('') : '<span class="text-sm text-slate-400">Nadie</span>'}</div>
+      </div>
+      <div class="rounded-[24px] border border-rose-400/20 bg-rose-400/[0.06] p-4">
+        <div class="mb-3 flex items-center gap-2 font-semibold text-rose-200">❌ Fallaron <span class="rounded-full border border-rose-400/30 bg-rose-400/10 px-2 py-0.5 text-xs">${wrong.length}</span></div>
+        <div class="flex flex-wrap gap-2">${wrong.length ? wrong.map(n => chip(n, false)).join('') : '<span class="text-sm text-slate-400">Nadie</span>'}</div>
+      </div>
+    </div>`;
 }
 
 function nextQuestion() {
@@ -1903,7 +1989,8 @@ function nextQuestion() {
 }
 
 function showScoreboard(isFinal) {
-  const sorted = Object.entries(players).sort((a, b) => b[1].score - a[1].score);
+  const sorted = Object.entries(players).sort((a, b) =>
+    (b[1].correct || 0) - (a[1].correct || 0) || b[1].score - a[1].score);
   const container = isFinal ? 'final-scoreboard' : 'scoreboard-list';
 
   document.getElementById(container).innerHTML = sorted.map(([name, data], i) => getScoreRowMarkup(name, data, i)).join('');
@@ -1915,17 +2002,17 @@ function showScoreboard(isFinal) {
         ${top3.length > 0 ? `<div class="rounded-[28px] border border-amber-300/30 bg-amber-300/10 p-6 text-center shadow-[0_18px_40px_rgba(251,191,36,0.12)] md:order-2 md:scale-[1.03]">
           <div class="text-5xl">🥇</div>
           <div class="mt-4 font-display text-2xl font-bold text-white">${esc(top3[0][0])}</div>
-          <div class="mt-2 font-mono-ui text-base font-semibold text-amber-200">${top3[0][1].score} pts</div>
+          <div class="mt-2 font-mono-ui text-base font-semibold text-amber-200">${top3[0][1].correct || 0}/${questions.length} aciertos</div>
         </div>` : ''}
         ${top3.length > 1 ? `<div class="rounded-[26px] border border-white/10 bg-slate-950/55 p-5 text-center md:order-1">
           <div class="text-4xl">🥈</div>
           <div class="mt-3 font-display text-xl font-semibold text-white">${esc(top3[1][0])}</div>
-          <div class="mt-2 font-mono-ui text-sm font-semibold text-slate-200">${top3[1][1].score} pts</div>
+          <div class="mt-2 font-mono-ui text-sm font-semibold text-slate-200">${top3[1][1].correct || 0}/${questions.length} aciertos</div>
         </div>` : ''}
         ${top3.length > 2 ? `<div class="rounded-[26px] border border-white/10 bg-slate-950/55 p-5 text-center md:order-3">
           <div class="text-4xl">🥉</div>
           <div class="mt-3 font-display text-xl font-semibold text-white">${esc(top3[2][0])}</div>
-          <div class="mt-2 font-mono-ui text-sm font-semibold text-slate-200">${top3[2][1].score} pts</div>
+          <div class="mt-2 font-mono-ui text-sm font-semibold text-slate-200">${top3[2][1].correct || 0}/${questions.length} aciertos</div>
         </div>` : ''}
       </div>
     `;
@@ -1940,17 +2027,25 @@ function showScoreboard(isFinal) {
 function continueAfterScoreboard() { showQuestion(); }
 
 function endGame() {
-  db.collection('games').doc(gamePin).update({ state: 'gameover' });
+  const update = { state: 'gameover' };
+  if (showFinalRankingToStudents) {
+    const sorted = Object.entries(players).sort((a, b) =>
+      (b[1].correct || 0) - (a[1].correct || 0) || b[1].score - a[1].score);
+    update.finalRanking = sorted.map(([name, p]) => ({ name, correct: p.correct || 0 }));
+    update.totalQuestions = questions.length;
+  }
+  db.collection('games').doc(gamePin).update(update);
   showScoreboard(true);
 }
 
 // ======== EXPORT RESULTS ========
 function exportResults() {
-  const sorted = Object.entries(players).sort((a, b) => b[1].score - a[1].score);
-  let csv = 'Posición,Nombre,Puntos,Respuestas Correctas,Total Preguntas\n';
+  const sorted = Object.entries(players).sort((a, b) =>
+    (b[1].correct || 0) - (a[1].correct || 0) || b[1].score - a[1].score);
+  let csv = 'Posición,Nombre,Respuestas Correctas,Total Preguntas,Puntos\n';
   sorted.forEach(([name, data], i) => {
     const correctCount = data.answers.filter((a, qi) => a === questions[qi]?.correct).length;
-    csv += `${i + 1},${name},${data.score},${correctCount},${questions.length}\n`;
+    csv += `${i + 1},${name},${correctCount},${questions.length},${data.score}\n`;
   });
 
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -2034,9 +2129,10 @@ function showStudentQuestion(msg) {
   currentQ = index;
   timeLeft = time;
   currentQuestionStartTime = Date.now();
+  studentLastAnswer = null;
 
   document.getElementById('sp-progress').textContent = `Pregunta ${index + 1}/${total}`;
-  document.getElementById('sp-score').textContent = `${studentScore} pts`;
+  document.getElementById('sp-score').textContent = `${studentCorrect} ${studentCorrect === 1 ? 'acierto' : 'aciertos'}`;
   document.getElementById('sp-question').textContent = question;
   
   if (image) {
@@ -2071,6 +2167,7 @@ function showStudentQuestion(msg) {
 function studentAnswer(index, el) {
   clearInterval(timerInterval);
   const timeSpent = (Date.now() - currentQuestionStartTime) / 1000;
+  studentLastAnswer = index;
   document.querySelectorAll('#sp-answers .answer-btn').forEach(b => b.style.pointerEvents = 'none');
   el.classList.add('selected');
   document.getElementById('sp-feedback').textContent = '✅ ¡Respuesta enviada! Esperando...';
@@ -2085,9 +2182,12 @@ function studentAnswer(index, el) {
 }
 
 function showStudentReveal(msg) {
-  const { correct, scores } = msg;
-  if (scores[studentName] !== undefined) {
+  const { correct, scores, corrects } = msg;
+  if (scores && scores[studentName] !== undefined) {
     studentScore = scores[studentName];
+  }
+  if (corrects && corrects[studentName] !== undefined) {
+    studentCorrect = corrects[studentName];
   }
 
   const btns = document.querySelectorAll('#sp-answers .answer-btn');
@@ -2095,13 +2195,42 @@ function showStudentReveal(msg) {
     if (i === correct) b.classList.add('correct-reveal');
     else b.classList.add('wrong-reveal');
   });
-  document.getElementById('sp-score').textContent = `${studentScore} pts`;
-  document.getElementById('sp-feedback').textContent = `La respuesta correcta era la ${['A','B','C','D'][correct]}. Tienes ${studentScore} puntos.`;
+  document.getElementById('sp-score').textContent = `${studentCorrect} ${studentCorrect === 1 ? 'acierto' : 'aciertos'}`;
+
+  const gotIt = studentLastAnswer === correct;
+  const head = studentLastAnswer === null
+    ? '⏰ No respondiste a tiempo.'
+    : (gotIt ? '✅ ¡Correcto!' : '❌ Has fallado.');
+  document.getElementById('sp-feedback').textContent = `${head} La respuesta correcta era la ${['A','B','C','D'][correct]}. Llevas ${studentCorrect} ${studentCorrect === 1 ? 'acierto' : 'aciertos'}.`;
 }
 
-function showStudentFinal() {
-  document.getElementById('sr-score').textContent = studentScore;
+function showStudentFinal(data) {
+  document.getElementById('sr-score').textContent = studentCorrect;
   document.getElementById('sr-subtitle').textContent = `¡Buen trabajo, ${studentName}!`;
+
+  const rankBox = document.getElementById('sr-ranking');
+  const ranking = data && data.finalRanking;
+  if (ranking && ranking.length) {
+    const total = (data && data.totalQuestions) || questions.length || '';
+    rankBox.innerHTML = `
+      <div class="mb-3 text-center font-display text-lg font-semibold text-white">🏆 Clasificación final</div>
+      <div class="space-y-2">
+        ${ranking.map((r, i) => {
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
+          const isMe = r.name === studentName;
+          return `<div class="flex items-center gap-3 rounded-[20px] border px-4 py-3 ${isMe ? 'border-teal-300/40 bg-teal-300/10' : 'border-white/10 bg-slate-950/55'}">
+            <div class="w-7 text-center text-lg font-bold">${medal}</div>
+            <div class="min-w-0 flex-1 truncate text-sm font-semibold ${isMe ? 'text-teal-100' : 'text-white'}">${esc(r.name)}${isMe ? ' (tú)' : ''}</div>
+            <div class="font-mono-ui text-sm font-semibold text-teal-200">${r.correct}${total ? '/' + total : ''}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    rankBox.classList.remove('hidden');
+  } else {
+    rankBox.innerHTML = '';
+    rankBox.classList.add('hidden');
+  }
+
   showScreen('screen-student-result');
 }
 
@@ -2144,6 +2273,8 @@ function resetAll() {
   players = {};
   currentQ = 0;
   studentScore = 0;
+  studentCorrect = 0;
+  studentLastAnswer = null;
   clearInterval(timerInterval);
   stopGameListeners();
   renderQuestions();
@@ -2157,6 +2288,9 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape' && !document.getElementById('my-quizzes-modal').classList.contains('hidden')) {
     closeMyQuizzes();
+  }
+  if (e.key === 'Escape' && !document.getElementById('settings-modal').classList.contains('hidden')) {
+    closeSettingsModal();
   }
   // Enter in join fields
   if (e.key === 'Enter' && document.getElementById('screen-join').classList.contains('active')) {
