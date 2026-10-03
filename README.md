@@ -7,9 +7,15 @@ Aplicación de cuestionarios interactivos al estilo Kahoot, potenciada por IA. F
 - **Generación de preguntas con IA** a partir de un tema libre o un PDF
 - **Soporte para Google Gemini y Anthropic Claude** como proveedores de IA
 - **Extracción de texto de PDF** para generar preguntas sobre el contenido
-- **Código QR y PIN** para que los alumnos se unan desde cualquier dispositivo del mismo origen
-- **Ranking entre preguntas** opcional: muestra la clasificación tras cada pregunta
-- **Exportación de resultados** en CSV al finalizar la partida
+- **Código QR y PIN** para que los alumnos se unan desde su móvil; enlace copiable y botón Compartir
+- **Diseño mobile-first**: botones grandes con formas ▲◆●■ (accesibles para daltónicos), bottom sheets, safe areas, pantalla siempre encendida durante la partida (Wake Lock)
+- **Avatares** y reconexión automática si el alumno recarga la página; nombres duplicados bloqueados
+- **Feedback en vivo para el alumno**: cuenta atrás, puntos ganados, posición en el ranking, vibración
+- **Control del profesor**: revelar antes de tiempo, pantalla completa, sonidos opcionales y atajos de teclado
+- **Ranking entre preguntas** opcional, con flechas de subida/bajada de puesto
+- **Análisis final por pregunta** (% de aciertos) y **exportación CSV** con las respuestas de cada alumno
+- **Editor mejorado**: marcar la correcta con un toque, duplicar, deshacer borrado, barajar orden, tiempo para todas, borrador autoguardado
+- **IA con dificultad y más idiomas** (alemán, italiano, portugués, gallego, euskera…)
 - **Guardado de cuestionarios** en la nube con cuenta de Google (Firebase Firestore)
 - **Configuración de API keys** guardada por usuario en Firebase
 - Sin frameworks, sin TypeScript, sin paso de compilación
@@ -36,14 +42,14 @@ python3 -m http.server 8080
 1. Abre la app y pulsa **Crear Cuestionario**
 2. Genera preguntas con IA (por tema o PDF) o añádelas manualmente
 3. (Opcional) Activa/desactiva **Mostrar ranking entre preguntas**
-4. Pulsa **Iniciar partida** — aparece un PIN de 6 dígitos y un código QR
+4. Pulsa **Iniciar partida** — aparece un PIN de 6 dígitos y un código QR (puedes copiar o compartir el enlace)
 5. Espera a que los alumnos se unan y pulsa **Empezar el juego**
 6. Controla el ritmo: cada pregunta avanza manualmente tras ver las estadísticas
 
 ### Alumno
 
-1. Abre la URL de la app (o escanea el QR) en el mismo dispositivo o en otro en la misma red
-2. Pulsa **Unirse como alumno**, introduce el PIN y tu nombre
+1. Escanea el QR o abre la app e introduce el PIN en **¿Tienes un PIN?**
+2. Escribe tu nombre y elige un avatar
 3. Responde las preguntas antes de que se acabe el tiempo
 
 ## Arquitectura
@@ -54,11 +60,11 @@ index.html          ← Toda la app: HTML + CSS + JavaScript
 
 ### Comunicación en tiempo real
 
-La comunicación entre profesor y alumno usa la **BroadcastChannel API** del navegador:
+La comunicación entre profesor y alumnos usa **Firebase Firestore**:
 
-- Canal: `carlaquiz-<PIN>`
-- No requiere servidor, WebSockets ni conexión a internet
-- Solo funciona entre pestañas del mismo origen (mismo dominio y protocolo)
+- `games/<PIN>`: estado de la partida (`lobby`, `question`, `reveal`, `gameover`) y datos de la pregunta/revelado
+- `games/<PIN>/players/<nombre>`: jugadores (`name`, `avatar`, `clientId`)
+- `games/<PIN>/answers/<nombre>`: última respuesta de cada alumno
 
 ### Pantallas (SPA)
 
@@ -83,10 +89,11 @@ La navegación es de una sola página. `showScreen(id)` activa/desactiva clases 
 | Variable | Tipo | Descripción |
 |---|---|---|
 | `questions` | `Array` | Lista de preguntas `{question, answers[], correct, time}` |
-| `players` | `Object` | Mapa `nombre → {score, answers[], streak}` |
+| `players` | `Object` | Mapa `nombre → {score, correct, answers[], streak, avatar}` |
 | `channel` | `BroadcastChannel` | Canal activo de comunicación |
 | `gamePin` | `string` | PIN de 6 dígitos de la partida actual |
 | `isTeacher` | `boolean` | Distingue la vista de profesor/alumno |
+| `phase` | `string` | Fase del profesor: `idle`, `lobby`, `question`, `reveal`, `scoreboard`, `final` |
 | `showRankingBetweenQuestions` | `boolean` | Muestra ranking tras cada pregunta |
 
 ### Flujo de juego (profesor)
@@ -108,12 +115,12 @@ startLobby() → startGame() → showQuestion() → timer → revealAnswer()
 ## Proveedores de IA
 
 ### Google Gemini
-- Modelos: `gemini-3.1-pro` (con fallback a `gemini-3.1-flash-lite`)
+- Modelos: `gemini-2.5-flash` (con fallback a `gemini-3.1-flash-lite-preview`)
 - Entrada: texto libre o texto extraído del PDF (via pdf.js)
 - Configura tu key en [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 
 ### Anthropic Claude
-- Modelo: `claude-sonnet-4-20250514`
+- Modelo: `claude-sonnet-5-5`
 - Entrada: texto libre o PDF completo en base64 (visión de documentos)
 - Configura tu key en [console.anthropic.com](https://console.anthropic.com)
 
@@ -142,15 +149,18 @@ service cloud.firestore {
     match /quizzes/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    // Partidas en directo: los alumnos no inician sesión
+    match /games/{pin}/{document=**} {
+      allow read, write: if true;
+    }
   }
 }
 ```
 
 ## Seguridad
 
-- Todo el HTML dinámico pasa por `esc(s)` (escapa usando `textContent`) para prevenir XSS
+- Todo el HTML dinámico pasa por `esc(s)` (escapa `& < > " '`) para prevenir XSS
 - Las API keys nunca se envían a ningún servidor propio; se llaman directamente a las APIs de Google/Anthropic desde el navegador
-- BroadcastChannel está limitado al mismo origen: no hay exposición de red
 
 ## Convenciones del código
 
