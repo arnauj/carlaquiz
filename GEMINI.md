@@ -7,8 +7,8 @@ This file provides foundational context and mandates for Gemini CLI when working
 
 - **Architecture:** Single-page application (SPA) contained entirely within `index.html`.
 - **Core Technologies:** Vanilla HTML5, CSS3 (Custom Properties), and JavaScript (ES2020+).
-- **Communication:** Uses the **BroadcastChannel API** for real-time synchronization between "Teacher" and "Student" tabs on the same origin (no WebSockets or backend required).
-- **AI Integration:** Generates questions from text or PDFs using Google Gemini (`gemini-3-flash-preview` with `gemini-3.1-flash-lite-preview` fallback) and Anthropic Claude (`claude-3-5-sonnet-20241022`).
+- **Communication:** Uses **Firebase Firestore** (`games/{pin}` + `players`/`answers` subcollections) for real-time synchronization between teacher and students on any device.
+- **AI Integration:** Generates questions from text or PDFs using Google Gemini (`gemini-3-flash-preview` with `gemini-3.1-flash-lite-preview` fallback) and Anthropic Claude (`claude-sonnet-5-5`).
 - **Persistence (Optional):** Firebase Firestore for cloud saving of quizzes and API keys.
 - **Dependencies:** None required for core functionality; uses CDNs for `pdf.js` and `qrcode.js`.
 
